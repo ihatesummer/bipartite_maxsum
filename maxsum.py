@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 
 INF = 10^60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
-N_NODE = 30  # number of nodes per group
-N_ITER = N_NODE*10
+N_NODE = 6  # number of nodes per group
+N_ITER = 100
 np.set_printoptions(precision=2)
 
 
@@ -80,7 +80,11 @@ def main():
         alpha = update_alpha(alpha, rho)
         eta = update_eta(eta, beta)
 
+
+    print(f"eta: {eta}")
+    print(f"alpha: {alpha}")
     D = eta + alpha + w
+    print(f"D: {D}")
     for row in range(N_NODE):
         idx_max = np.argmax(D[row, :])
         D[row, :] = 0
