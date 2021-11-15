@@ -3,9 +3,43 @@ import matplotlib.pyplot as plt
 
 INF = 10^60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
-N_NODE = 6  # number of nodes per group
+N_NODE = 10  # number of nodes per group
 N_ITER = 100
 np.set_printoptions(precision=2)
+
+
+def main():
+    rng = np.random.default_rng(0)
+    w = rng.uniform(0, 1, (N_NODE, N_NODE))
+    print(f"weights:\n{w}")
+    beta = np.zeros((N_NODE, N_NODE))
+    eta = np.zeros((N_NODE, N_NODE))
+    rho = np.zeros((N_NODE, N_NODE))
+    alpha = np.zeros((N_NODE, N_NODE))
+
+    for i in range(N_ITER):
+        beta = update_beta(beta, alpha, w)
+        rho = update_rho(rho, eta, w)
+        alpha = update_alpha(alpha, rho)
+        eta = update_eta(eta, beta)
+
+
+    print(f"eta: {eta}")
+    print(f"alpha: {alpha}")
+    D = eta + alpha + w
+    print(f"D: {D}")
+    for row in range(N_NODE):
+        idx_max = np.argmax(D[row, :])
+        D[row, :] = 0
+        D[row, idx_max] = 1
+
+    is_valid = check_validity(D)
+    if is_valid:
+        print("Successful bipartite matching " + 
+        f"with pairings as \n{D}")
+        show_match(w, D)
+    else:
+        print("Pairing unsucessful.")
 
 
 def update_beta(beta, alpha, w):
@@ -55,48 +89,14 @@ def show_match(w, D):
     fig = plt.figure()
     ax = fig.add_subplot()
     ax.set_title('Preferences')
-    plt.imshow(w, origin='lower', cmap='jet')
+    plt.imshow(w, origin='lower', cmap='gray')
     plt.colorbar(orientation='vertical')
     x = np.linspace(0, N_NODE-1, N_NODE)
     y = np.argmax(D, axis=1)
     plt.scatter(y, x,
-                marker='o',
-                color='black')
+                marker='d',
+                color='red')
     plt.show()
-
-
-def main():
-    rng = np.random.default_rng(0)
-    w = rng.uniform(0, 1, (N_NODE, N_NODE))
-    print(f"weights:\n{w}")
-    beta = np.zeros((N_NODE, N_NODE))
-    eta = np.zeros((N_NODE, N_NODE))
-    rho = np.zeros((N_NODE, N_NODE))
-    alpha = np.zeros((N_NODE, N_NODE))
-
-    for i in range(N_ITER):
-        beta = update_beta(beta, alpha, w)
-        rho = update_rho(rho, eta, w)
-        alpha = update_alpha(alpha, rho)
-        eta = update_eta(eta, beta)
-
-
-    print(f"eta: {eta}")
-    print(f"alpha: {alpha}")
-    D = eta + alpha + w
-    print(f"D: {D}")
-    for row in range(N_NODE):
-        idx_max = np.argmax(D[row, :])
-        D[row, :] = 0
-        D[row, idx_max] = 1
-
-    is_valid = check_validity(D)
-    if is_valid:
-        print("Successful bipartite matching " + 
-        f"with pairings as \n{D}")
-        show_match(w, D)
-    else:
-        print("Pairing unsucessful.")
 
 
 if __name__=="__main__":
