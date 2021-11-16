@@ -5,7 +5,7 @@ INF = 10^60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
-bLogSumExp = True
+bLogSumExp = False
 np.set_printoptions(precision=2)
 
 
@@ -21,6 +21,8 @@ def main():
         rho = update_rho(alpha, rho, w)
 
     D = rho + alpha
+    print(f"alpha:\n{alpha}")
+    print(f"rho:\n{rho}")
     print(f"D:\n{D}")
     for row in range(N_NODE):
         idx_max = np.argmax(D[row, :])
