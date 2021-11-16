@@ -5,6 +5,7 @@ INF = 10^60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
+bLogSumExp = True
 np.set_printoptions(precision=2)
 
 
@@ -12,19 +13,14 @@ def main():
     rng = np.random.default_rng(0)
     w = rng.uniform(0, 1, (N_NODE, N_NODE))
     print(f"weights:\n{w}")
-    beta = np.zeros((N_NODE, N_NODE))
-    eta = np.zeros((N_NODE, N_NODE))
-    rho = np.zeros((N_NODE, N_NODE))
     alpha = np.zeros((N_NODE, N_NODE))
+    rho = np.zeros((N_NODE, N_NODE))
 
     for i in range(N_ITER):
-        beta = update_beta(beta, alpha, w)
-        rho = update_rho(rho, eta, w)
-        alpha = update_alpha(alpha, rho)
-        eta = update_eta(eta, beta)
+        alpha = update_alpha(alpha, rho, w)
+        rho = update_rho(alpha, rho, w)
 
-    D = eta + alpha + w
-    # D = beta + rho
+    D = rho + alpha
     print(f"D:\n{D}")
     for row in range(N_NODE):
         idx_max = np.argmax(D[row, :])
@@ -40,37 +36,37 @@ def main():
         print("Pairing unsucessful.")
 
 
-def update_beta(beta, alpha, w):
-    old = beta
-    new = w + alpha
-    return new*(1-DAMP) + old*(DAMP)
+def log_sum_exp(input_array):
+    return np.log(np.sum(np.exp(input_array)))
 
 
-def update_rho(rho, eta, w):
-    old = rho
-    new = w + eta
-    return new*(1-DAMP) + old*(DAMP)
-
-
-def update_alpha(alpha, rho):
+def update_alpha(alpha, rho, w):
     old = alpha
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
         for j in range(N_NODE):
-            tmp = np.copy(rho)
-            tmp[i, j] = -INF
-            new[i, j] = -max(tmp[i, :])
+            tmp = rho + w/2
+            if bLogSumExp:
+                tmp_ith_row_except_ij = np.delete(tmp[i, :], j)
+                new[i, j] = w[i, j]/2 - log_sum_exp(tmp_ith_row_except_ij)
+            else:
+                tmp[i, j] = -INF
+                new[i, j] = w[i, j]/2 -max(tmp[i, :])
     return new*(1-DAMP) + old*(DAMP)
 
 
-def update_eta(eta, beta):
-    old = eta
+def update_rho(alpha, rho, w):
+    old = rho
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
         for j in range(N_NODE):
-            tmp = np.copy(beta)
-            tmp[i, j] = -INF
-            new[i, j] = -max(tmp[:, j])
+            tmp = alpha + w/2
+            if bLogSumExp:
+                tmp_jth_col_except_ij = np.delete(tmp[:, j], i)
+                new[i, j] = w[i, j]/2 - log_sum_exp(tmp_jth_col_except_ij)
+            else:
+                tmp[i, j] = -INF
+                new[i, j] = w[i, j]/2 -max(tmp[:, j])
     return new*(1-DAMP) + old*(DAMP)
 
 
