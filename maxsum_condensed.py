@@ -5,7 +5,7 @@ INF = 10^60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
-bLogSumExp = False
+bLogSumExp = True
 np.set_printoptions(precision=2)
 
 
@@ -17,22 +17,13 @@ def main():
     rho = np.zeros((N_NODE, N_NODE))
 
     for i in range(N_ITER):
-        alpha = update_alpha(alpha, rho, w)
-        rho = update_rho(alpha, rho, w)
+        alpha = update_alpha(alpha, rho, w, bLogSumExp)
+        rho = update_rho(alpha, rho, w, bLogSumExp)
 
-    D = rho + alpha
-    print(f"alpha:\n{alpha}")
-    print(f"rho:\n{rho}")
-    print(f"D:\n{D}")
-    for row in range(N_NODE):
-        idx_max = np.argmax(D[row, :])
-        D[row, :] = 0
-        D[row, idx_max] = 1
-
+    D = conclude_update(alpha, rho)
     is_valid = check_validity(D)
     if is_valid:
-        print("Successful bipartite matching " + 
-        f"with pairings as \n{D}")
+        print("Sucessful bipartite matching")
         show_match(w, D)
     else:
         print("Pairing unsucessful.")
@@ -42,7 +33,7 @@ def log_sum_exp(input_array):
     return np.log(np.sum(np.exp(input_array)))
 
 
-def update_alpha(alpha, rho, w):
+def update_alpha(alpha, rho, w, bLogSumExp):
     old = alpha
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
@@ -57,7 +48,7 @@ def update_alpha(alpha, rho, w):
     return new*(1-DAMP) + old*(DAMP)
 
 
-def update_rho(alpha, rho, w):
+def update_rho(alpha, rho, w, bLogSumExp):
     old = rho
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
@@ -71,6 +62,18 @@ def update_rho(alpha, rho, w):
                 new[i, j] = w[i, j]/2 -max(tmp[:, j])
     return new*(1-DAMP) + old*(DAMP)
 
+
+def conclude_update(alpha, rho):
+    D = rho + alpha
+    print(f"final alpha:\n{alpha}")
+    print(f"final rho:\n{rho}")
+    print(f"alpha+rho:\n{D}")
+    for row in range(N_NODE):
+        idx_max = np.argmax(D[row, :])
+        D[row, :] = 0
+        D[row, idx_max] = 1
+    print(f"D:\n{D}")
+    return D
 
 def check_validity(D):
     rowsum = np.sum(D, axis=0)
