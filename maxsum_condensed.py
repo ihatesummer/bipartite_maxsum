@@ -65,15 +65,16 @@ def update_rho(alpha, rho, w, bLogSumExp):
 
 def conclude_update(alpha, rho):
     D = rho + alpha
-    print(f"final alpha:\n{alpha}")
-    print(f"final rho:\n{rho}")
-    print(f"alpha+rho:\n{D}")
+    # print(f"final alpha:\n{alpha}")
+    # print(f"final rho:\n{rho}")
+    # print(f"alpha+rho:\n{D}")
     for row in range(N_NODE):
         idx_max = np.argmax(D[row, :])
         D[row, :] = 0
         D[row, idx_max] = 1
-    print(f"D:\n{D}")
+    # print(f"D:\n{D}")
     return D
+
 
 def check_validity(D):
     rowsum = np.sum(D, axis=0)

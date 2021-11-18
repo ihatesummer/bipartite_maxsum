@@ -1,27 +1,28 @@
-from re import A
-from sklearn.utils import validation
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 import os as os
 from sklearn.model_selection import train_test_split
 from maxsum_condensed import (update_alpha, update_rho,
                               conclude_update,
-                              check_validity)
+                              check_validity,
+                              show_match)
 
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
 N_DATASET = 100000
-bLogSumExp = True
+bLogSumExp = False
 filenames = {
     "w": f"{N_NODE}-by-{N_NODE} - w.csv",
     "alpha_in": f"{N_NODE}-by-{N_NODE} - alpha_in.csv",
     "rho_in": f"{N_NODE}-by-{N_NODE} - rho_in.csv",
     "alpha_out": f"{N_NODE}-by-{N_NODE} - alpha_out - LogSumExp={bLogSumExp}.csv",
-    "rho_out": f"{N_NODE}-by-{N_NODE} - rho_out - LogSumExp={bLogSumExp}.csv"
+    "rho_out": f"{N_NODE}-by-{N_NODE} - rho_out - LogSumExp={bLogSumExp}.csv",
+    "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star - LogSumExp={bLogSumExp}.csv",
+    "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star - LogSumExp={bLogSumExp}.csv"
 }
+FILENAME_NN_WEIGHT = "weights.h5"
 
 SEED_OFFSET = 10000000
 SEED_W = 0
@@ -29,17 +30,49 @@ SEED_ALPHA = SEED_W + SEED_OFFSET
 SEED_RHO = SEED_ALPHA + SEED_OFFSET
 
 
+def main():
+    (w, alpha_in, rho_in,
+     alpha_out, rho_out,
+     alpha_star, rho_star) = fetch_dataset()
+    dataset_x = np.concatenate((w, alpha_in, rho_in), axis=1)
+    dataset_y = np.concatenate((alpha_out, rho_out), axis=1)
+    dataset_y_star = np.concatenate((alpha_star, rho_star), axis=1)
+    # print_dataset_dimensions(w, alpha_in, rho_in,
+    #                          alpha_out, rho_out,
+    #                          alpha_star, rho_star,
+    #                          dataset_x, dataset_y)
+    (x_train, x_test,
+    y_train, y_test) = train_test_split(dataset_x, dataset_y,
+                                        test_size=0.2, shuffle=False)
+    (_, _,
+    y_train_star, y_test_star) = train_test_split(dataset_x, dataset_y_star,
+                                                  test_size=0.2, shuffle=False)
+
+    model = fetch_model(x_train, y_train, x_test, y_test)
+
+    _, mse = model.evaluate(x_test, y_test, verbose=0)
+    print(f"Test set MSE: {mse}")
+
+    run_test_matching(x_test, y_test_star, model)
+
+    
+
+
 def fetch_dataset():
     bDatasetAvailable = check_dataset_availability()
     if not bDatasetAvailable:
         (w, alpha_in, rho_in,
-         alpha_out, rho_out) = generate_and_write_dataset()
+         alpha_out, rho_out,
+         alpha_star, rho_star) = generate_and_write_dataset()
         print("Dataset generated.")
     else:
         (w, alpha_in, rho_in,
-         alpha_out, rho_out) = read_dataset()
+         alpha_out, rho_out,
+         alpha_star, rho_star) = read_dataset()
         print("Dataset loaded.")
-    return w, alpha_in, rho_in, alpha_out, rho_out
+    return (w, alpha_in, rho_in,
+            alpha_out, rho_out,
+            alpha_star, rho_star)
 
 
 def check_dataset_availability():
@@ -56,7 +89,9 @@ def read_dataset():
     rho_in = np.loadtxt(filenames['rho_in'], dtype=float, delimiter=',')
     alpha_out = np.loadtxt(filenames['alpha_out'], dtype=float, delimiter=',')
     rho_out = np.loadtxt(filenames['rho_out'], dtype=float, delimiter=',')
-    return w, alpha_in, rho_in, alpha_out, rho_out
+    alpha_star = np.loadtxt(filenames['alpha_star'], dtype=float, delimiter=',')
+    rho_star = np.loadtxt(filenames['rho_star'], dtype=float, delimiter=',')
+    return w, alpha_in, rho_in, alpha_out, rho_out, alpha_star, rho_star
 
 
 def generate_and_write_dataset():
@@ -65,10 +100,16 @@ def generate_and_write_dataset():
     np.savetxt(filenames['alpha_in'], alpha_in, delimiter=',')
     np.savetxt(filenames['rho_in'], rho_in, delimiter=',')
 
-    alpha_out, rho_out = generate_dataset_output(alpha_in, rho_in, w)
+    (alpha_out, rho_out,
+     alpha_star, rho_star) = generate_dataset_output(alpha_in,
+                                                     rho_in, w)
     np.savetxt(filenames['alpha_out'], alpha_out, delimiter=',')
     np.savetxt(filenames['rho_out'], rho_out, delimiter=',')
-    return w, alpha_in, rho_in, alpha_out, rho_out
+    np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
+    np.savetxt(filenames['rho_star'], rho_star, delimiter=',')
+    return (w, alpha_in, rho_in,
+            alpha_out, rho_out,
+            alpha_star, rho_star)
 
 
 def generate_dataset_input():
@@ -93,18 +134,27 @@ def generate_dataset_input():
 def generate_dataset_output(alpha_in, rho_in, w):
     alpha_next = np.zeros(np.shape(alpha_in))
     rho_next = np.zeros(np.shape(rho_in))
+    alpha_star = np.zeros(np.shape(alpha_in))
+    rho_star = np.zeros(np.shape(rho_in))
     for i in range(N_DATASET):
         w_now = reshape_to_square(w[i])
         alpha_now = reshape_to_square(alpha_in[i])
         rho_now = reshape_to_square(rho_in[i])
 
-        alpha_next[i] = np.reshape(
-            update_alpha(alpha_now, rho_now, w_now, bLogSumExp),
-            (1, N_NODE**2))
-        rho_next[i] = np.reshape(
-            update_rho(alpha_now, rho_now, w_now, bLogSumExp),
-            (1, N_NODE**2))
-    return alpha_next, rho_next
+        alpha_next[i] = reshape_to_flat(
+            update_alpha(alpha_now, rho_now, w_now, bLogSumExp))
+        
+        rho_next[i] = reshape_to_flat(
+            update_rho(alpha_now, rho_now, w_now, bLogSumExp))
+
+        alpha_tmp = reshape_to_square(alpha_star[0])
+        rho_tmp = reshape_to_square(rho_star[0])
+        for j in range(N_ITER):
+            alpha_tmp = update_alpha(alpha_tmp, rho_tmp, w_now, bLogSumExp)
+            rho_tmp = update_rho(alpha_tmp, rho_tmp, w_now, bLogSumExp)
+        alpha_star[i] = reshape_to_flat(alpha_tmp)
+        rho_star[i] = reshape_to_flat(rho_tmp)
+    return alpha_next, rho_next, alpha_star, rho_star
 
 
 def reshape_to_square(flat_array):
@@ -113,6 +163,13 @@ def reshape_to_square(flat_array):
     except Exception as e:
         print(f"ERROR: array reshaping failed: {e}")
 
+
+def reshape_to_flat(square_array):
+    try:
+        return np.reshape(square_array, N_NODE**2)
+    except Exception as e:
+        print(f"ERROR: array reshaping failed: {e}")
+    
 
 def decompose_dataset(arr, mode):
     if mode == 'input':
@@ -132,28 +189,47 @@ def decompose_dataset(arr, mode):
         pass
 
 
-def print_train_inputs():
-    print(f"weights:\n{w}")
-    print(f"alpha_in:\n{alpha_in}")
-    print(f"rho_in:\n{rho_in}")
-    print(f"shapes:\n{np.shape(rho_in)}")
-    print(f"collective:\n{dataset_x}")
-    print(f"shape:\n{np.shape(dataset_x)}")
+def print_dataset_dimensions(w, alpha_in, rho_in,
+                             alpha_out, rho_out,
+                             alpha_star, rho_star,
+                             dataset_x, dataset_y):
+    print("Shapes of ...")
+    print(f"weights:\n{np.shape(w)}")
+    print(f"alpha_in:\n{np.shape(alpha_in)}")
+    print(f"rho_in:\n{np.shape(rho_in)}")
+    print(f"alpha_out:\n{np.shape(alpha_out)}")
+    print(f"rho_out:\n{np.shape(rho_out)}")
+    print(f"alpha_star:\n{np.shape(alpha_star)}")
+    print(f"rho_star:\n{np.shape(rho_star)}")
+    print(f"dataset_x:\n{np.shape(dataset_x)}")
+    print(f"dataset_y:\n{np.shape(dataset_y)}")
 
 
-def print_train_outputs():
-    print(f"alpha_out:\n{alpha_out}")
-    print(f"rho_out:\n{rho_out}")
-    print(f"shapes:\n{np.shape(rho_out)}")
-    print(f"collective:\n{dataset_y}")
-    print(f"shape:\n{np.shape(dataset_y)}")
+def fetch_model(x_train, y_train, x_test, y_test):
+    try:
+        model = initiallize_model()
+        model.evaluate(x_test, y_test, verbose=0)
+        model.load_weights(FILENAME_NN_WEIGHT)
+        print("Trained NN weights loaded.")
+
+    except:
+        model = initiallize_model()
+        print("Training NN.")
+        model.fit(x_train, y_train,
+                  batch_size=64,
+                  epochs=32,
+                  validation_data=(x_test, y_test))
+        model.save_weights(FILENAME_NN_WEIGHT)
+    return model
 
 
-def create_model():
+def initiallize_model():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.Dropout(0.1),
         tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(2*(N_NODE**2))
     ])
     loss_fn = tf.keras.losses.MeanSquaredError()
@@ -164,74 +240,66 @@ def create_model():
     return model
 
 
-def lol_just_trying_this_one_scenario():
-    sample_input = np.array([dataset_x[0]])
-    print(f"sample_input: {sample_input}")
-    w, alpha, rho = decompose_dataset(sample_input[0], 'input')
-    print(f"w: {w}")
-    # print(f"alpha_in: {alpha}")
-    # print(f"rho_in: {rho}")
-
-    print("\nIterating NN...")
-    # sample_prediction = model(sample_input).numpy()
-    # alpha_out_pred, rho_out_pred = decompose_dataset(sample_prediction[0], 'output')
-    # print(f"alpha_out_pred: {alpha_out_pred}")
-    # print(f"rho_out_pred: {rho_out_pred}")
-    w_flat = np.reshape(w, N_NODE**2)
-    alpha_flat = np.reshape(alpha, N_NODE**2)
-    rho_flat = np.reshape(rho, N_NODE**2)
-    sample_prediction_and_w = np.array([
-        np.concatenate((w_flat, alpha_flat, rho_flat))])
-    for i in range(N_ITER):
-        sample_prediction = model(sample_prediction_and_w)
-        alpha_and_rho = sample_prediction.numpy()[0]
-        sample_prediction_and_w = np.array([
-            np.concatenate((w_flat, alpha_and_rho))
-        ])
-
-    alpha_final_pred, rho_final_pred = decompose_dataset(
-        alpha_and_rho, 'output')
-    print(f"alpha_pred: {alpha_final_pred}")
-    print(f"rho_pred: {rho_final_pred}")
-    D = conclude_update(alpha_final_pred, rho_final_pred)
-    check_validity(D)
+def remove_invalid_samples(arr, idx_invalid):
+    return np.delete(arr, idx_invalid, axis=0)
 
 
-tic = time.time()
-checkpoint_path = "NNtrained/cp.ckpt"
-checkpoint_dir = os.path.dirname(checkpoint_path)
-
-cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                 save_weights_only=True,
-                                                 verbose=1)
-
-w, alpha_in, rho_in, alpha_out, rho_out = fetch_dataset()
-dataset_x = np.concatenate((w, alpha_in, rho_in), axis=1)
-dataset_y = np.concatenate((alpha_out, rho_out), axis=1)
-# print_train_inputs()
-# print_train_outputs()
-(x_train, x_test,
- y_train, y_test) = train_test_split(dataset_x, dataset_y,
-                                     test_size=0.33, shuffle=False)
-try:
-    latest = tf.train.latest_checkpoint(checkpoint_dir)
-    model = create_model()
-    model.load_weights(latest)
-    print("Trained NN loaded:")
-
-except:
-    model = create_model()
-    print("Training NN:")
-    model.fit(x_train, y_train, epochs=5,
-            validation_data=(x_test, y_test),
-            callbacks=[cp_callback])
-    model.save_weights(checkpoint_dir)
+def construct_nn_input(w, alpha_rho):
+    w_alpha_rho = np.array([
+        np.concatenate((w, alpha_rho))
+    ])
+    return w_alpha_rho
 
 
-print("Test set evaluation:")
-model.evaluate(x_test, y_test, verbose=2)
+def run_test_matching(x_test, y_test_star, model):
+    n_test_samples = np.size(x_test, axis=0)
+    D_msgPassing, D_msgPassing_validity = get_D_msgPassing(
+        n_test_samples, y_test_star)
 
-lol_just_trying_this_one_scenario()
+    idx_invalid_samples = np.where(D_msgPassing_validity==False)[0]
+    
+    D_msgPassing = remove_invalid_samples(D_msgPassing,
+                                          idx_invalid_samples)
+    
+    D_ann, D_ann_validity = get_D_ann(n_test_samples, x_test, model)
+    print("test accuracy[%]: ", np.count_nonzero(D_ann_validity)/n_test_samples*100)
+    print(f"i.e. {np.count_nonzero(D_ann_validity)} out of {n_test_samples}")
 
-toc = time.time()
-print(f"Runtime: {toc-tic}sec.")
+
+def get_D_ann(n_test_samples, x_test, model):
+    D_ann = np.zeros((n_test_samples, N_NODE**2), dtype=int)
+    D_ann_validity = np.zeros(n_test_samples, dtype=bool)
+    for i in range(n_test_samples):
+        w, _, _ = decompose_dataset(x_test[i], 'input')
+        w = reshape_to_flat(w)
+        alpha_rho = np.repeat(np.zeros(np.shape(w)), 2)
+        w_alpha_rho = construct_nn_input(w, alpha_rho)
+        for j in range(N_ITER):
+            alpha_rho = model(w_alpha_rho).numpy()[0]
+            w_alpha_rho = construct_nn_input(w, alpha_rho)
+        alpha_converged, rho_converged = decompose_dataset(
+            alpha_rho, 'output')        
+        D_real = conclude_update(alpha_converged, rho_converged)
+        is_valid = check_validity(D_real)
+        D_ann[i] = reshape_to_flat(D_real)
+        D_ann_validity[i] = is_valid
+    return D_ann, D_ann_validity
+
+
+def get_D_msgPassing(n_test_samples, y_test_star):
+    D_msgPassing = np.zeros((n_test_samples, N_NODE**2), dtype=int)
+    D_msgPassing_validity = np.zeros((n_test_samples, 1), dtype=bool)
+    for i in range(n_test_samples):
+        alpha_star, rho_star = decompose_dataset(y_test_star[i], 'output')
+        D_real = conclude_update(alpha_star, rho_star)
+        is_valid = check_validity(D_real)
+        D_msgPassing[i] = reshape_to_flat(D_real)
+        D_msgPassing_validity[i] = is_valid
+    return D_msgPassing, D_msgPassing_validity
+
+
+if __name__=="__main__":
+    tic = time.time()
+    main()
+    toc = time.time()
+    print(f"Runtime: {toc-tic}sec.")
