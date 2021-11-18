@@ -15,14 +15,10 @@ N_DATASET = 100000
 bLogSumExp = False
 filenames = {
     "w": f"{N_NODE}-by-{N_NODE} - w.csv",
-    "alpha_in": f"{N_NODE}-by-{N_NODE} - alpha_in.csv",
-    "rho_in": f"{N_NODE}-by-{N_NODE} - rho_in.csv",
-    "alpha_out": f"{N_NODE}-by-{N_NODE} - alpha_out - LogSumExp={bLogSumExp}.csv",
-    "rho_out": f"{N_NODE}-by-{N_NODE} - rho_out - LogSumExp={bLogSumExp}.csv",
     "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star - LogSumExp={bLogSumExp}.csv",
     "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star - LogSumExp={bLogSumExp}.csv"
 }
-FILENAME_NN_WEIGHT = "weights.h5"
+FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
 
 SEED_OFFSET = 10000000
 SEED_W = 0
@@ -30,49 +26,34 @@ SEED_ALPHA = SEED_W + SEED_OFFSET
 SEED_RHO = SEED_ALPHA + SEED_OFFSET
 
 
+
 def main():
-    (w, alpha_in, rho_in,
-     alpha_out, rho_out,
-     alpha_star, rho_star) = fetch_dataset()
-    dataset_x = np.concatenate((w, alpha_in, rho_in), axis=1)
-    dataset_y = np.concatenate((alpha_out, rho_out), axis=1)
-    dataset_y_star = np.concatenate((alpha_star, rho_star), axis=1)
-    # print_dataset_dimensions(w, alpha_in, rho_in,
-    #                          alpha_out, rho_out,
-    #                          alpha_star, rho_star,
-    #                          dataset_x, dataset_y)
-    (x_train, x_test,
-    y_train, y_test) = train_test_split(dataset_x, dataset_y,
-                                        test_size=0.2, shuffle=False)
-    (_, _,
-    y_train_star, y_test_star) = train_test_split(dataset_x, dataset_y_star,
-                                                  test_size=0.2, shuffle=False)
+    (w, alpha_star, rho_star) = fetch_dataset()
+    dataset_w = w
+    dataset_alpha_rho_star = np.concatenate((alpha_star, rho_star), axis=1)
+    # print_dataset_dimensions(w, alpha_star, rho_star,
+    #                          dataset_w, dataset_alpha_rho_star)
+    (w_train, w_test,
+     alpha_rho_star_train,
+     alpha_rho_star_test) = train_test_split(dataset_w, dataset_alpha_rho_star,
+                                             test_size=0.2, shuffle=False)
+    model = initialize_model()
+    loss(model, w_test, alpha_rho_star_test)
+    # _, mse = model.evaluate(x_test, y_test, verbose=0)
+    # print(f"Test set MSE: {mse}")
 
-    model = fetch_model(x_train, y_train, x_test, y_test)
-
-    _, mse = model.evaluate(x_test, y_test, verbose=0)
-    print(f"Test set MSE: {mse}")
-
-    run_test_matching(x_test, y_test_star, model)
-
-    
-
+    # run_test_matching(x_test, y_test_star, model)
+ 
 
 def fetch_dataset():
     bDatasetAvailable = check_dataset_availability()
     if not bDatasetAvailable:
-        (w, alpha_in, rho_in,
-         alpha_out, rho_out,
-         alpha_star, rho_star) = generate_and_write_dataset()
+        (w, alpha_star, rho_star) = generate_and_write_dataset()
         print("Dataset generated.")
     else:
-        (w, alpha_in, rho_in,
-         alpha_out, rho_out,
-         alpha_star, rho_star) = read_dataset()
+        (w, alpha_star, rho_star) = read_dataset()
         print("Dataset loaded.")
-    return (w, alpha_in, rho_in,
-            alpha_out, rho_out,
-            alpha_star, rho_star)
+    return (w, alpha_star, rho_star)
 
 
 def check_dataset_availability():
@@ -83,78 +64,48 @@ def check_dataset_availability():
     return all(bAvailable)
 
 
-def read_dataset():
-    w = np.loadtxt(filenames['w'], dtype=float, delimiter=',')
-    alpha_in = np.loadtxt(filenames['alpha_in'], dtype=float, delimiter=',')
-    rho_in = np.loadtxt(filenames['rho_in'], dtype=float, delimiter=',')
-    alpha_out = np.loadtxt(filenames['alpha_out'], dtype=float, delimiter=',')
-    rho_out = np.loadtxt(filenames['rho_out'], dtype=float, delimiter=',')
-    alpha_star = np.loadtxt(filenames['alpha_star'], dtype=float, delimiter=',')
-    rho_star = np.loadtxt(filenames['rho_star'], dtype=float, delimiter=',')
-    return w, alpha_in, rho_in, alpha_out, rho_out, alpha_star, rho_star
-
-
 def generate_and_write_dataset():
-    w, alpha_in, rho_in = generate_dataset_input()
+    w = generate_dataset_input()
     np.savetxt(filenames['w'], w, delimiter=',')
-    np.savetxt(filenames['alpha_in'], alpha_in, delimiter=',')
-    np.savetxt(filenames['rho_in'], rho_in, delimiter=',')
-
-    (alpha_out, rho_out,
-     alpha_star, rho_star) = generate_dataset_output(alpha_in,
-                                                     rho_in, w)
-    np.savetxt(filenames['alpha_out'], alpha_out, delimiter=',')
-    np.savetxt(filenames['rho_out'], rho_out, delimiter=',')
+    alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
     np.savetxt(filenames['rho_star'], rho_star, delimiter=',')
-    return (w, alpha_in, rho_in,
-            alpha_out, rho_out,
-            alpha_star, rho_star)
+    return (w, alpha_star, rho_star)
 
 
 def generate_dataset_input():
     for i in range(N_DATASET):
         rng = np.random.default_rng(SEED_W+i)
         w_instance = rng.uniform(0, 1, (1, N_NODE**2))
-        rng = np.random.default_rng(SEED_ALPHA+i)
-        alpha_instance = rng.uniform(0, 1, (1, N_NODE**2))
-        rng = np.random.default_rng(SEED_RHO+i)
-        rho_instance = rng.uniform(0, 1, (1, N_NODE**2))
         if i==0:
             w = w_instance
-            alpha = alpha_instance
-            rho = rho_instance
         else:
             w = np.append(w, w_instance, axis=0)
-            alpha = np.append(alpha, alpha_instance, axis=0)
-            rho = np.append(rho, rho_instance, axis=0)
-    return w, alpha, rho
+    return w
 
 
-def generate_dataset_output(alpha_in, rho_in, w):
-    alpha_next = np.zeros(np.shape(alpha_in))
-    rho_next = np.zeros(np.shape(rho_in))
-    alpha_star = np.zeros(np.shape(alpha_in))
-    rho_star = np.zeros(np.shape(rho_in))
+def generate_dataset_output(w):
+    alpha_star = np.zeros(np.shape(w))
+    rho_star = np.zeros(np.shape(w))
     for i in range(N_DATASET):
         w_now = reshape_to_square(w[i])
-        alpha_now = reshape_to_square(alpha_in[i])
-        rho_now = reshape_to_square(rho_in[i])
-
-        alpha_next[i] = reshape_to_flat(
-            update_alpha(alpha_now, rho_now, w_now, bLogSumExp))
-        
-        rho_next[i] = reshape_to_flat(
-            update_rho(alpha_now, rho_now, w_now, bLogSumExp))
-
-        alpha_tmp = reshape_to_square(alpha_star[0])
-        rho_tmp = reshape_to_square(rho_star[0])
+        alpha_tmp = np.zeros(np.shape(w_now))
+        rho_tmp = np.zeros(np.shape(w_now))
         for j in range(N_ITER):
-            alpha_tmp = update_alpha(alpha_tmp, rho_tmp, w_now, bLogSumExp)
-            rho_tmp = update_rho(alpha_tmp, rho_tmp, w_now, bLogSumExp)
+            alpha_tmp = update_alpha(
+                alpha_tmp, rho_tmp, w_now, bLogSumExp=False)
+            rho_tmp = update_rho(
+                alpha_tmp, rho_tmp, w_now, bLogSumExp=False)
         alpha_star[i] = reshape_to_flat(alpha_tmp)
         rho_star[i] = reshape_to_flat(rho_tmp)
-    return alpha_next, rho_next, alpha_star, rho_star
+    return alpha_star, rho_star
+
+
+def read_dataset():
+    w = np.loadtxt(filenames['w'], dtype=float, delimiter=',')
+    alpha_star = np.loadtxt(filenames['alpha_star'], dtype=float, delimiter=',')
+    rho_star = np.loadtxt(filenames['rho_star'], dtype=float, delimiter=',')
+    return w, alpha_star, rho_star
 
 
 def reshape_to_square(flat_array):
@@ -189,38 +140,14 @@ def decompose_dataset(arr, mode):
         pass
 
 
-def print_dataset_dimensions(w, alpha_in, rho_in,
-                             alpha_out, rho_out,
-                             alpha_star, rho_star,
-                             dataset_x, dataset_y):
+def print_dataset_dimensions(w, alpha_star, rho_star,
+                             dataset_w, dataset_alpha_rho_star):
     print("Shapes of ...")
     print(f"weights:\n{np.shape(w)}")
-    print(f"alpha_in:\n{np.shape(alpha_in)}")
-    print(f"rho_in:\n{np.shape(rho_in)}")
-    print(f"alpha_out:\n{np.shape(alpha_out)}")
-    print(f"rho_out:\n{np.shape(rho_out)}")
     print(f"alpha_star:\n{np.shape(alpha_star)}")
     print(f"rho_star:\n{np.shape(rho_star)}")
-    print(f"dataset_x:\n{np.shape(dataset_x)}")
-    print(f"dataset_y:\n{np.shape(dataset_y)}")
-
-
-def fetch_model(x_train, y_train, x_test, y_test):
-    try:
-        model = initialize_model()
-        model.evaluate(x_test, y_test, verbose=0)
-        model.load_weights(FILENAME_NN_WEIGHT)
-        print("Trained NN weights loaded.")
-
-    except:
-        model = initialize_model()
-        print("Training NN.")
-        model.fit(x_train, y_train,
-                  batch_size=64,
-                  epochs=32,
-                  validation_data=(x_test, y_test))
-        model.save_weights(FILENAME_NN_WEIGHT)
-    return model
+    print(f"dataset_x:\n{np.shape(dataset_w)}")
+    print(f"dataset_y:\n{np.shape(dataset_alpha_rho_star)}")
 
 
 def initialize_model():
@@ -232,12 +159,33 @@ def initialize_model():
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(2*(N_NODE**2))
     ])
-    loss_fn = tf.keras.losses.MeanSquaredError()
-
-    model.compile(optimizer='adam',
-                  loss=loss_fn,
-                  metrics=['mse'])
     return model
+
+    
+def loss(model, w, alpha_rho_star):
+    alpha_rho = model(w)
+    nData = np.size(alpha_rho, axis=0)
+    # l1_errors = np.zeros(nData)
+    l1_errors = np.zeros(5)
+    # for i in range(nData):
+    for i in range(5):
+        alpha, rho = decompose_dataset(
+            alpha_rho[i], 'output')
+        alpha_next = update_alpha(alpha, rho,
+                                  reshape_to_square(w[i]),
+                                  bLogSumExp=True)
+        rho_next = update_rho(alpha, rho,
+                              reshape_to_square(w[i]),
+                              bLogSumExp=True)
+
+        alpha_next = reshape_to_flat(alpha_next)
+        rho_next = reshape_to_flat(rho_next)
+        alpha_rho_next = np.concatenate((alpha_next, rho_next))
+        l1_errors[i] = np.sum(
+            np.abs(alpha_rho_star[i] - alpha_rho_next))
+        
+    print(l1_errors)
+    print(np.mean(l1_errors))
 
 
 def remove_invalid_samples(arr, idx_invalid):
