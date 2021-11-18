@@ -165,10 +165,8 @@ def initialize_model():
 def loss(model, w, alpha_rho_star):
     alpha_rho = model(w)
     nData = np.size(alpha_rho, axis=0)
-    # l1_errors = np.zeros(nData)
-    l1_errors = np.zeros(5)
-    # for i in range(nData):
-    for i in range(5):
+    l1_errors = np.zeros(nData)
+    for i in range(nData):
         alpha, rho = decompose_dataset(
             alpha_rho[i], 'output')
         alpha_next = update_alpha(alpha, rho,
@@ -184,8 +182,7 @@ def loss(model, w, alpha_rho_star):
         l1_errors[i] = np.sum(
             np.abs(alpha_rho_star[i] - alpha_rho_next))
         
-    print(l1_errors)
-    print(np.mean(l1_errors))
+    return np.mean(l1_errors)
 
 
 def remove_invalid_samples(arr, idx_invalid):
