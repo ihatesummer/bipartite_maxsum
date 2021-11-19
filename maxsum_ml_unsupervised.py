@@ -33,10 +33,11 @@ def main():
     dataset_alpha_rho_star = np.concatenate((alpha_star,
                                              rho_star),
                                             axis=1)
+    n_datasets_to_use = 1000
     (w_train, w_test,
-     _,
-     alpha_rho_star_test) = train_test_split(dataset_w,
-                                             dataset_alpha_rho_star,
+     alpha_rho_star_train,
+     alpha_rho_star_test) = train_test_split(dataset_w[:n_datasets_to_use, :],
+                                             dataset_alpha_rho_star[:n_datasets_to_use, :],
                                              test_size=0.2,
                                              shuffle=False)
     try:
@@ -46,9 +47,9 @@ def main():
     except:
         model = initialize_model()
         print("Training NN.")
-        optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3)
-        loss_fxn = tf.keras.losses.MeanAbsoluteError()
-        n_epochs = N_NODE*10
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        loss_fxn = tf.keras.losses.MeanSquaredError()
+        n_epochs = 100
         for epoch in range(n_epochs):
             print(f"Starting epoch {epoch}...")
             for step, w_sample in enumerate(w_train):
@@ -61,11 +62,11 @@ def main():
                                     model.trainable_weights)
                 optimizer.apply_gradients(
                     zip(grads, model.trainable_weights))
-                log_interval = 1000
+                log_interval = 100
                 if step % log_interval == 0:
-                    print(f"Step {step}: loss={loss_value}")
+                    print(f"Epoch {epoch}, step {step}: loss={loss_value}")
         model.save_weights(FILENAME_NN_WEIGHT)
-    run_test_matching(w_test, alpha_rho_star_test, model)
+    run_test_matching(w_train, alpha_rho_star_train, model)
  
 
 def fetch_dataset():
@@ -232,10 +233,17 @@ def run_test_matching(w, alpha_rho_star, model):
     D_nn, D_nn_validity = get_D_nn(n_samples, w, model)
     print_assessment(D_nn_validity, n_samples)
 
-    # idx_valid_samples = np.where(D_nn_validity==True)[0]
-    # print("idx: ", idx_valid_samples)
-    # w_tmp = construct_nn_input(w[idx_valid_samples[0]])
-    # print(model(w_tmp))
+    idx_valid_samples = np.where(D_nn_validity==True)[0]
+    print("idx: ", idx_valid_samples)
+    w_tmp = construct_nn_input(w[idx_valid_samples[0]])
+    alpha_rho_tmp = model(w_tmp)
+    alpha_tmp, rho_tmp = decompose_dataset(alpha_rho_tmp[0], 'output')
+    alpha_tmp = reshape_to_square(alpha_tmp)
+    rho_tmp = reshape_to_square(rho_tmp)
+    print(alpha_tmp)
+    print(rho_tmp)
+    print(alpha_tmp+rho_tmp)
+    print(conclude_update(alpha_tmp, rho_tmp))
 
 
 def get_D_mp(n_samples, alpha_rho_star):
@@ -265,8 +273,7 @@ def get_D_nn(n_samples, w, model):
 
 def print_assessment(D_validity, n_samples):
     nValid = np.count_nonzero(D_validity)
-    print("Iterative method validity:",
-          f"{nValid} out of {n_samples}",
+    print(f"{nValid} out of {n_samples}",
           f"({nValid/n_samples*100} %)")
 
 if __name__=="__main__":
