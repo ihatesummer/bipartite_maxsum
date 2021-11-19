@@ -11,20 +11,15 @@ from maxsum_condensed import (update_alpha, update_rho,
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
-N_DATASET = 100000
+N_DATASET = 10000
 bLogSumExp = False
 filenames = {
-    "w": f"{N_NODE}-by-{N_NODE} - w.csv",
-    "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star - LogSumExp={bLogSumExp}.csv",
-    "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star - LogSumExp={bLogSumExp}.csv"
+    "w": f"{N_NODE}-by-{N_NODE} - w_easy.csv",
+    "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star.csv",
+    "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv"
 }
 FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
-
-SEED_OFFSET = 10000000
 SEED_W = 0
-SEED_ALPHA = SEED_W + SEED_OFFSET
-SEED_RHO = SEED_ALPHA + SEED_OFFSET
-
 
 
 def main():
@@ -33,11 +28,11 @@ def main():
     dataset_alpha_rho_star = np.concatenate((alpha_star,
                                              rho_star),
                                             axis=1)
-    n_datasets_to_use = 1000
+    n_samples_to_use = N_DATASET
     (w_train, w_test,
      alpha_rho_star_train,
-     alpha_rho_star_test) = train_test_split(dataset_w[:n_datasets_to_use, :],
-                                             dataset_alpha_rho_star[:n_datasets_to_use, :],
+     alpha_rho_star_test) = train_test_split(dataset_w[:n_samples_to_use, :],
+                                             dataset_alpha_rho_star[:n_samples_to_use, :],
                                              test_size=0.2,
                                              shuffle=False)
     try:
@@ -49,7 +44,7 @@ def main():
         print("Training NN.")
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         loss_fxn = tf.keras.losses.MeanSquaredError()
-        n_epochs = 100
+        n_epochs = 10
         for epoch in range(n_epochs):
             print(f"Starting epoch {epoch}...")
             for step, w_sample in enumerate(w_train):
@@ -62,16 +57,16 @@ def main():
                                     model.trainable_weights)
                 optimizer.apply_gradients(
                     zip(grads, model.trainable_weights))
-                log_interval = 100
+                log_interval = 1000
                 if step % log_interval == 0:
                     print(f"Epoch {epoch}, step {step}: loss={loss_value}")
         model.save_weights(FILENAME_NN_WEIGHT)
-    run_test_matching(w_train, alpha_rho_star_train, model)
+    run_test_matching(w_test, alpha_rho_star_test, model)
  
 
 def fetch_dataset():
-    bDatasetAvailable = check_dataset_availability()
-    if not bDatasetAvailable:
+    bAvailable = check_dataset_availability()
+    if not bAvailable:
         (w, alpha_star, rho_star) = generate_and_write_dataset()
         print("Dataset generated.")
     else:
@@ -89,7 +84,7 @@ def check_dataset_availability():
 
 
 def generate_and_write_dataset():
-    w = generate_dataset_input()
+    w = generate_dataset_input_easy()
     np.savetxt(filenames['w'], w, delimiter=',')
     alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
@@ -105,6 +100,31 @@ def generate_dataset_input():
             w = w_instance
         else:
             w = np.append(w, w_instance, axis=0)
+    return w
+
+
+def generate_dataset_input_easy():
+    w = np.zeros((N_DATASET, N_NODE**2))
+    for row in range(N_DATASET):
+        w[row, :] = np.random.uniform(0, 0.10, N_NODE**2)
+        idx_taken = np.array([], dtype=int)
+        for i in range(N_NODE):
+            idx_picked = np.random.randint(0, N_NODE)
+            while idx_picked in idx_taken:
+                idx_picked = np.random.randint(0, N_NODE)
+            w[row, N_NODE*i + idx_picked] = 1
+            idx_taken = np.append(idx_taken, idx_picked)
+    return w
+
+
+def generate_dataset_input_quantized():
+    for i in range(N_DATASET):
+        rng = np.random.default_rng(SEED_W+i)
+        w_instance = rng.integers(0, 10, (1, N_NODE**2))
+        if i==0:
+            w = w_instance/10
+        else:
+            w = np.append(w, w_instance/10, axis=0)
     return w
 
 
@@ -171,9 +191,9 @@ def print_dataset_dimensions(arr_list):
 
 def initialize_model():
     inputs = tf.keras.layers.Input(shape=(N_NODE**2,))
-    x1 = tf.keras.layers.Dense(128, activation="relu")(inputs)
-    x2 = tf.keras.layers.Dense(128, activation="relu")(x1)
-    x3 = tf.keras.layers.Dense(64, activation="relu")(x2)
+    x1 = tf.keras.layers.Dense(50, activation="relu")(inputs)
+    x2 = tf.keras.layers.Dense(100, activation="relu")(x1)
+    x3 = tf.keras.layers.Dense(50, activation="relu")(x2)
     outputs = tf.keras.layers.Dense(50, name="predictions")(x3)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
@@ -233,17 +253,18 @@ def run_test_matching(w, alpha_rho_star, model):
     D_nn, D_nn_validity = get_D_nn(n_samples, w, model)
     print_assessment(D_nn_validity, n_samples)
 
-    idx_valid_samples = np.where(D_nn_validity==True)[0]
-    print("idx: ", idx_valid_samples)
-    w_tmp = construct_nn_input(w[idx_valid_samples[0]])
-    alpha_rho_tmp = model(w_tmp)
-    alpha_tmp, rho_tmp = decompose_dataset(alpha_rho_tmp[0], 'output')
-    alpha_tmp = reshape_to_square(alpha_tmp)
-    rho_tmp = reshape_to_square(rho_tmp)
-    print(alpha_tmp)
-    print(rho_tmp)
-    print(alpha_tmp+rho_tmp)
-    print(conclude_update(alpha_tmp, rho_tmp))
+    # idx_valid_samples = np.where(D_nn_validity==True)[0]
+    # print("valid idices: ", idx_valid_samples)
+    # tmp_idx = idx_valid_samples[20]
+    # w_tmp = construct_nn_input(w[tmp_idx])
+    # alpha_rho_tmp = model(w_tmp)
+    # alpha_tmp, rho_tmp = decompose_dataset(alpha_rho_tmp[0], 'output')
+    # print(f"alpha: \n{alpha_tmp}")
+    # print(f"rho: \n{rho_tmp}")
+    # print(f"alpha+rho: \n{alpha_tmp+rho_tmp}")
+    # print(reshape_to_square(D_nn[tmp_idx]))
+    # print(reshape_to_square(D_mp[tmp_idx]))
+
 
 
 def get_D_mp(n_samples, alpha_rho_star):
