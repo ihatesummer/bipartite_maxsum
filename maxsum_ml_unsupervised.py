@@ -30,19 +30,42 @@ SEED_RHO = SEED_ALPHA + SEED_OFFSET
 def main():
     (w, alpha_star, rho_star) = fetch_dataset()
     dataset_w = w
-    dataset_alpha_rho_star = np.concatenate((alpha_star, rho_star), axis=1)
-    # print_dataset_dimensions(w, alpha_star, rho_star,
-    #                          dataset_w, dataset_alpha_rho_star)
+    dataset_alpha_rho_star = np.concatenate((alpha_star,
+                                             rho_star),
+                                            axis=1)
     (w_train, w_test,
-     alpha_rho_star_train,
-     alpha_rho_star_test) = train_test_split(dataset_w, dataset_alpha_rho_star,
-                                             test_size=0.2, shuffle=False)
-    model = initialize_model()
-    loss(model, w_test, alpha_rho_star_test)
-    # _, mse = model.evaluate(x_test, y_test, verbose=0)
-    # print(f"Test set MSE: {mse}")
-
-    # run_test_matching(x_test, y_test_star, model)
+     _,
+     alpha_rho_star_test) = train_test_split(dataset_w,
+                                             dataset_alpha_rho_star,
+                                             test_size=0.2,
+                                             shuffle=False)
+    try:
+        model = initialize_model()
+        model.load_weights(FILENAME_NN_WEIGHT)
+        print("Trained NN weights loaded.")
+    except:
+        model = initialize_model()
+        print("Training NN.")
+        optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3)
+        loss_fxn = tf.keras.losses.MeanAbsoluteError()
+        n_epochs = N_NODE*10
+        for epoch in range(n_epochs):
+            print(f"Starting epoch {epoch}...")
+            for step, w_sample in enumerate(w_train):
+                with tf.GradientTape() as tape:
+                    w_in = construct_nn_input(w_sample)
+                    alpha_rho = model(w_in, training=True)
+                    alpha_rho_passed = forward_pass(w_sample, alpha_rho)
+                    loss_value = loss_fxn(alpha_rho, alpha_rho_passed)
+                grads = tape.gradient(loss_value,
+                                    model.trainable_weights)
+                optimizer.apply_gradients(
+                    zip(grads, model.trainable_weights))
+                log_interval = 1000
+                if step % log_interval == 0:
+                    print(f"Step {step}: loss={loss_value}")
+        model.save_weights(FILENAME_NN_WEIGHT)
+    run_test_matching(w_test, alpha_rho_star_test, model)
  
 
 def fetch_dataset():
@@ -140,47 +163,52 @@ def decompose_dataset(arr, mode):
         pass
 
 
-def print_dataset_dimensions(w, alpha_star, rho_star,
-                             dataset_w, dataset_alpha_rho_star):
-    print("Shapes of ...")
-    print(f"weights:\n{np.shape(w)}")
-    print(f"alpha_star:\n{np.shape(alpha_star)}")
-    print(f"rho_star:\n{np.shape(rho_star)}")
-    print(f"dataset_x:\n{np.shape(dataset_w)}")
-    print(f"dataset_y:\n{np.shape(dataset_alpha_rho_star)}")
+def print_dataset_dimensions(arr_list):
+    for arr in arr_list:
+        print(f"Shape: {np.shape(arr)}")
 
 
 def initialize_model():
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dropout(0.2),
-        tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.Dense(2*(N_NODE**2))
-    ])
+    inputs = tf.keras.layers.Input(shape=(N_NODE**2,))
+    x1 = tf.keras.layers.Dense(128, activation="relu")(inputs)
+    x2 = tf.keras.layers.Dense(128, activation="relu")(x1)
+    x3 = tf.keras.layers.Dense(64, activation="relu")(x2)
+    outputs = tf.keras.layers.Dense(50, name="predictions")(x3)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
-    
-def loss(model, w, alpha_rho_star):
-    alpha_rho = model(w)
-    nData = np.size(alpha_rho, axis=0)
+
+def forward_pass(w, alpha_rho):
+    alpha, rho = decompose_dataset(alpha_rho[0], 'output')
+    alpha_next = update_alpha(alpha, rho,
+                              reshape_to_square(w),
+                              bLogSumExp=True)
+    rho_next = update_rho(alpha, rho,
+                          reshape_to_square(w),
+                          bLogSumExp=True)
+    alpha_next = reshape_to_flat(alpha_next)
+    rho_next = reshape_to_flat(rho_next)
+    alpha_rho_passed = np.concatenate((alpha_next, rho_next))
+    return alpha_rho_passed
+
+
+def loss(model, w):
+    nData = np.size(w, axis=0)
     l1_errors = np.zeros(nData)
     for i in range(nData):
-        alpha, rho = decompose_dataset(
-            alpha_rho[i], 'output')
+        alpha_rho = model(w[i])
+        alpha, rho = decompose_dataset(alpha_rho, 'output')
         alpha_next = update_alpha(alpha, rho,
                                   reshape_to_square(w[i]),
                                   bLogSumExp=True)
         rho_next = update_rho(alpha, rho,
                               reshape_to_square(w[i]),
                               bLogSumExp=True)
-
         alpha_next = reshape_to_flat(alpha_next)
         rho_next = reshape_to_flat(rho_next)
         alpha_rho_next = np.concatenate((alpha_next, rho_next))
         l1_errors[i] = np.sum(
-            np.abs(alpha_rho_star[i] - alpha_rho_next))
+            np.abs(alpha_rho - alpha_rho_next))
         
     return np.mean(l1_errors)
 
@@ -189,59 +217,57 @@ def remove_invalid_samples(arr, idx_invalid):
     return np.delete(arr, idx_invalid, axis=0)
 
 
-def construct_nn_input(w, alpha_rho):
-    w_alpha_rho = np.array([
-        np.concatenate((w, alpha_rho))
-    ])
-    return w_alpha_rho
+def construct_nn_input(w):
+    w = np.array([w])
+    return w
 
 
-def run_test_matching(x_test, y_test_star, model):
-    n_test_samples = np.size(x_test, axis=0)
-    D_msgPassing, D_msgPassing_validity = get_D_msgPassing(
-        n_test_samples, y_test_star)
+def run_test_matching(w, alpha_rho_star, model):
+    n_samples = np.size(w, axis=0)
+    D_mp, D_mp_validity = get_D_mp(
+        n_samples, alpha_rho_star)
+    # idx_invalid_samples = np.where(D_mp_validity==False)[0]
+    # D_mp = remove_invalid_samples(D_mp, idx_invalid_samples)
+    print_assessment(D_mp_validity, n_samples)
+    D_nn, D_nn_validity = get_D_nn(n_samples, w, model)
+    print_assessment(D_nn_validity, n_samples)
 
-    idx_invalid_samples = np.where(D_msgPassing_validity==False)[0]
-    
-    D_msgPassing = remove_invalid_samples(D_msgPassing,
-                                          idx_invalid_samples)
-    
-    D_ann, D_ann_validity = get_D_ann(n_test_samples, x_test, model)
-    print("test accuracy[%]: ", np.count_nonzero(D_ann_validity)/n_test_samples*100)
-    print(f"i.e. {np.count_nonzero(D_ann_validity)} out of {n_test_samples}")
-
-
-def get_D_ann(n_test_samples, x_test, model):
-    D_ann = np.zeros((n_test_samples, N_NODE**2), dtype=int)
-    D_ann_validity = np.zeros(n_test_samples, dtype=bool)
-    for i in range(n_test_samples):
-        w, _, _ = decompose_dataset(x_test[i], 'input')
-        w = reshape_to_flat(w)
-        alpha_rho = np.repeat(np.zeros(np.shape(w)), 2)
-        w_alpha_rho = construct_nn_input(w, alpha_rho)
-        for j in range(N_ITER):
-            alpha_rho = model(w_alpha_rho).numpy()[0]
-            w_alpha_rho = construct_nn_input(w, alpha_rho)
-        alpha_converged, rho_converged = decompose_dataset(
-            alpha_rho, 'output')        
-        D_real = conclude_update(alpha_converged, rho_converged)
-        is_valid = check_validity(D_real)
-        D_ann[i] = reshape_to_flat(D_real)
-        D_ann_validity[i] = is_valid
-    return D_ann, D_ann_validity
+    # idx_valid_samples = np.where(D_nn_validity==True)[0]
+    # print("idx: ", idx_valid_samples)
+    # w_tmp = construct_nn_input(w[idx_valid_samples[0]])
+    # print(model(w_tmp))
 
 
-def get_D_msgPassing(n_test_samples, y_test_star):
-    D_msgPassing = np.zeros((n_test_samples, N_NODE**2), dtype=int)
-    D_msgPassing_validity = np.zeros((n_test_samples, 1), dtype=bool)
-    for i in range(n_test_samples):
-        alpha_star, rho_star = decompose_dataset(y_test_star[i], 'output')
-        D_real = conclude_update(alpha_star, rho_star)
-        is_valid = check_validity(D_real)
-        D_msgPassing[i] = reshape_to_flat(D_real)
-        D_msgPassing_validity[i] = is_valid
-    return D_msgPassing, D_msgPassing_validity
+def get_D_mp(n_samples, alpha_rho_star):
+    D_mp = np.zeros((n_samples, N_NODE**2), dtype=int)
+    D_mp_validity = np.zeros(n_samples, dtype=bool)
+    for i in range(n_samples):
+        alpha_star, rho_star = decompose_dataset(alpha_rho_star[i], 'output')
+        D_pred = conclude_update(alpha_star, rho_star)
+        D_mp[i] = reshape_to_flat(D_pred)
+        D_mp_validity[i] = check_validity(D_pred)
+    return D_mp, D_mp_validity
 
+
+def get_D_nn(n_samples, w, model):
+    D_nn = np.zeros((n_samples, N_NODE**2), dtype=int)
+    D_nn_validity = np.zeros(n_samples, dtype=bool)
+    for i in range(n_samples):
+        w_sample = construct_nn_input(w[i])
+        alpha_rho = model(w_sample).numpy()[0]
+        alpha_sample, rho_sample = decompose_dataset(
+            alpha_rho, 'output')
+        D_pred = conclude_update(alpha_sample, rho_sample)
+        D_nn[i] = reshape_to_flat(D_pred)
+        D_nn_validity[i] = check_validity(D_pred)
+    return D_nn, D_nn_validity
+
+
+def print_assessment(D_validity, n_samples):
+    nValid = np.count_nonzero(D_validity)
+    print("Iterative method validity:",
+          f"{nValid} out of {n_samples}",
+          f"({nValid/n_samples*100} %)")
 
 if __name__=="__main__":
     tic = time.time()
