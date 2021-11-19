@@ -106,7 +106,7 @@ def generate_dataset_input():
 def generate_dataset_input_easy():
     w = np.zeros((N_DATASET, N_NODE**2))
     for row in range(N_DATASET):
-        w[row, :] = np.random.uniform(0, 0.10, N_NODE**2)
+        w[row, :] = np.random.uniform(0, 0.9, N_NODE**2)
         idx_taken = np.array([], dtype=int)
         for i in range(N_NODE):
             idx_picked = np.random.randint(0, N_NODE)
@@ -114,6 +114,8 @@ def generate_dataset_input_easy():
                 idx_picked = np.random.randint(0, N_NODE)
             w[row, N_NODE*i + idx_picked] = 1
             idx_taken = np.append(idx_taken, idx_picked)
+        if row==0:
+            print(reshape_to_square(w[row,:]))
     return w
 
 
