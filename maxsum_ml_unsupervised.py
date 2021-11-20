@@ -14,7 +14,7 @@ N_ITER = N_NODE*10
 N_DATASET = 10000
 bLogSumExp = False
 filenames = {
-    "w": f"{N_NODE}-by-{N_NODE} - w_easy.csv",
+    "w": f"{N_NODE}-by-{N_NODE} - w.csv",
     "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star.csv",
     "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv"
 }
@@ -31,10 +31,11 @@ def main():
     n_samples_to_use = N_DATASET
     (w_train, w_test,
      alpha_rho_star_train,
-     alpha_rho_star_test) = train_test_split(dataset_w[:n_samples_to_use, :],
-                                             dataset_alpha_rho_star[:n_samples_to_use, :],
-                                             test_size=0.2,
-                                             shuffle=False)
+     alpha_rho_star_test) = train_test_split(
+         dataset_w[:n_samples_to_use, :],
+         dataset_alpha_rho_star[:n_samples_to_use, :],
+         test_size=0.2,
+         shuffle=False)
     try:
         model = initialize_model()
         model.load_weights(FILENAME_NN_WEIGHT)
@@ -61,7 +62,7 @@ def main():
                 if step % log_interval == 0:
                     print(f"Epoch {epoch}, step {step}: loss={loss_value}")
         model.save_weights(FILENAME_NN_WEIGHT)
-    run_test_matching(w_test, alpha_rho_star_test, model)
+    run_test_matching(w_train, alpha_rho_star_train, model)
  
 
 def fetch_dataset():
@@ -84,7 +85,7 @@ def check_dataset_availability():
 
 
 def generate_and_write_dataset():
-    w = generate_dataset_input_easy()
+    w = generate_dataset_input_easy(unif_ub=0.95)
     np.savetxt(filenames['w'], w, delimiter=',')
     alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
@@ -103,10 +104,10 @@ def generate_dataset_input():
     return w
 
 
-def generate_dataset_input_easy():
+def generate_dataset_input_easy(unif_ub):
     w = np.zeros((N_DATASET, N_NODE**2))
     for row in range(N_DATASET):
-        w[row, :] = np.random.uniform(0, 0.9, N_NODE**2)
+        w[row, :] = np.random.uniform(0, unif_ub, N_NODE**2)
         idx_taken = np.array([], dtype=int)
         for i in range(N_NODE):
             idx_picked = np.random.randint(0, N_NODE)
@@ -115,6 +116,8 @@ def generate_dataset_input_easy():
             w[row, N_NODE*i + idx_picked] = 1
             idx_taken = np.append(idx_taken, idx_picked)
         if row==0:
+            print(f"Generating {N_DATASET} sets"
+                  "of input weights such as...")
             print(reshape_to_square(w[row,:]))
     return w
 
@@ -251,8 +254,11 @@ def run_test_matching(w, alpha_rho_star, model):
         n_samples, alpha_rho_star)
     # idx_invalid_samples = np.where(D_mp_validity==False)[0]
     # D_mp = remove_invalid_samples(D_mp, idx_invalid_samples)
+    print("MP performance:")
     print_assessment(D_mp_validity, n_samples)
+
     D_nn, D_nn_validity = get_D_nn(n_samples, w, model)
+    print("NN performance:")
     print_assessment(D_nn_validity, n_samples)
 
     # idx_valid_samples = np.where(D_nn_validity==True)[0]
@@ -298,6 +304,7 @@ def print_assessment(D_validity, n_samples):
     nValid = np.count_nonzero(D_validity)
     print(f"{nValid} out of {n_samples}",
           f"({nValid/n_samples*100} %)")
+
 
 if __name__=="__main__":
     tic = time.time()
