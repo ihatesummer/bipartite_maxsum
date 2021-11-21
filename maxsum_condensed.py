@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-INF = 10^60  # infinity
+INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10

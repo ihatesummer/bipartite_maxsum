@@ -24,25 +24,25 @@ markers = ['.', 'v', '^', '<', '>',
            '1', '2', '3', '4', 'p',
            'P', 'h', '+', 'x', 'D']
 
-ax.semilogy(ub, acc_baseline*100,
+ax.plot(ub, acc_baseline*100,
         'v',
         alpha=1, color='black',
         markersize=5,
         label="Iterative search")
-ax.semilogy(ub, acc*100,
+ax.plot(ub, acc*100,
         '+',
         alpha=1, color='red',
         markersize=10,
         label="Ultra-low latency")
 # plt.axhline(1, alpha=0.7, linewidth=2, color='black', label="Iterative")
 
-ax.set_xlabel("Demand congestion")
-ax.set_ylabel("Optimal matching achievability [%]")
+ax.set_xlabel("Relative link power")
+ax.set_ylabel("Probability of finding optima")
 ax.set_xlim(xmin=0, xmax=1.05)
-ax.set_ylim(ymin=60, ymax=110)
+ax.set_ylim(ymin=60, ymax=105)
 ax.set_xticks(np.linspace(0,1,11))
-ax.set_yticks(np.linspace(60,100,11))
+ax.set_yticks(np.linspace(50,100,11))
 ax.grid()
 ax.legend()
 plt.tight_layout()
-plt.savefig("accuracy by problem difficulty_log.png")
+plt.savefig("accuracy by problem difficulty.png")

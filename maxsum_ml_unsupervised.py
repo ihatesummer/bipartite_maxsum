@@ -18,7 +18,8 @@ filenames = {
     "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star.csv",
     "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv"
 }
-FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
+# FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
+FILENAME_NN_WEIGHT = "weights_unsupervised_gyh_30.h5"
 SEED_W = 0
 
 
@@ -62,7 +63,7 @@ def main():
                 if step % log_interval == 0:
                     print(f"Epoch {epoch}, step {step}: loss={loss_value}")
         model.save_weights(FILENAME_NN_WEIGHT)
-    run_test_matching(w_train, alpha_rho_star_train, model)
+    run_test_matching(w_test, alpha_rho_star_test, model)
  
 
 def fetch_dataset():
@@ -85,7 +86,7 @@ def check_dataset_availability():
 
 
 def generate_and_write_dataset():
-    w = generate_dataset_input_easy(unif_ub=0.95)
+    w = generate_dataset_input_easy(unif_ub=1.0)
     np.savetxt(filenames['w'], w, delimiter=',')
     alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
@@ -117,7 +118,7 @@ def generate_dataset_input_easy(unif_ub):
             idx_taken = np.append(idx_taken, idx_picked)
         if row==0:
             print(f"Generating {N_DATASET} sets"
-                  "of input weights such as...")
+                  " of input weights such as...")
             print(reshape_to_square(w[row,:]))
     return w
 
