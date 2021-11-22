@@ -1,27 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
-bLogSumExp = True
+bLogSumExp = False
 np.set_printoptions(precision=2)
 
 
 def main():
-    rng = np.random.default_rng(0)
-    w = rng.uniform(0, 1, (N_NODE, N_NODE))
+    # rng = np.random.default_rng(0)
+    w = np.random.uniform(0, 1, (N_NODE, N_NODE))
     print(f"weights:\n{w}")
     alpha = np.zeros((N_NODE, N_NODE))
     rho = np.zeros((N_NODE, N_NODE))
-
+    tic = time.time()
     for i in range(N_ITER):
         alpha = update_alpha(alpha, rho, w, bLogSumExp)
         rho = update_rho(alpha, rho, w, bLogSumExp)
 
     D = conclude_update(alpha, rho)
     is_valid = check_validity(D)
+    toc = time.time()
+    print(f"matching time: {(toc - tic)/1000}ms")
     if is_valid:
         print("Sucessful bipartite matching")
         show_match(w, D)

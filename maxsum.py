@@ -17,11 +17,14 @@ def main():
     rho = np.zeros((N_NODE, N_NODE))
     alpha = np.zeros((N_NODE, N_NODE))
 
-    for i in range(N_ITER):
+    for i in range(N_ITER+1):
+        # D_old = eta + alpha + w
         beta = update_beta(beta, alpha, w)
         rho = update_rho(rho, eta, w)
         alpha = update_alpha(alpha, rho)
         eta = update_eta(eta, beta)
+        D = eta + alpha + w
+        # print(D - D_old)
 
     D = eta + alpha + w
     # D = beta + rho

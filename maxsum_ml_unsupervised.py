@@ -5,12 +5,11 @@ import os as os
 from sklearn.model_selection import train_test_split
 from maxsum_condensed import (update_alpha, update_rho,
                               conclude_update,
-                              check_validity,
-                              show_match)
+                              check_validity)
 
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
-N_ITER = N_NODE*10
+N_ITER = N_NODE*4
 N_DATASET = 10000
 bLogSumExp = False
 filenames = {
@@ -18,8 +17,8 @@ filenames = {
     "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star.csv",
     "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv"
 }
-# FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
-FILENAME_NN_WEIGHT = "weights_unsupervised_gyh_30.h5"
+FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
+# FILENAME_NN_WEIGHT = "weights_unsupervised_gyh_30.h5"
 SEED_W = 0
 
 
@@ -36,11 +35,12 @@ def main():
          dataset_w[:n_samples_to_use, :],
          dataset_alpha_rho_star[:n_samples_to_use, :],
          test_size=0.2,
-         shuffle=False)
+         shuffle=True)
     try:
         model = initialize_model()
         model.load_weights(FILENAME_NN_WEIGHT)
         print("Trained NN weights loaded.")
+        print(model.summary())
     except:
         model = initialize_model()
         print("Training NN.")
@@ -86,7 +86,7 @@ def check_dataset_availability():
 
 
 def generate_and_write_dataset():
-    w = generate_dataset_input_easy(unif_ub=1.0)
+    w = generate_dataset_input_easy(unif_ub=0.8)
     np.savetxt(filenames['w'], w, delimiter=',')
     alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
@@ -209,10 +209,10 @@ def forward_pass(w, alpha_rho):
     alpha, rho = decompose_dataset(alpha_rho[0], 'output')
     alpha_next = update_alpha(alpha, rho,
                               reshape_to_square(w),
-                              bLogSumExp=True)
+                              bLogSumExp=False)
     rho_next = update_rho(alpha, rho,
                           reshape_to_square(w),
-                          bLogSumExp=True)
+                          bLogSumExp=False)
     alpha_next = reshape_to_flat(alpha_next)
     rho_next = reshape_to_flat(rho_next)
     alpha_rho_passed = np.concatenate((alpha_next, rho_next))
@@ -279,18 +279,24 @@ def run_test_matching(w, alpha_rho_star, model):
 def get_D_mp(n_samples, alpha_rho_star):
     D_mp = np.zeros((n_samples, N_NODE**2), dtype=int)
     D_mp_validity = np.zeros(n_samples, dtype=bool)
+    tic4 = time.time()
     for i in range(n_samples):
         alpha_star, rho_star = decompose_dataset(alpha_rho_star[i], 'output')
         D_pred = conclude_update(alpha_star, rho_star)
         D_mp[i] = reshape_to_flat(D_pred)
         D_mp_validity[i] = check_validity(D_pred)
+    toc4 = time.time()
+    print(f"toc4: {(toc4-tic4)/n_samples}")
     return D_mp, D_mp_validity
 
 
 def get_D_nn(n_samples, w, model):
     D_nn = np.zeros((n_samples, N_NODE**2), dtype=int)
     D_nn_validity = np.zeros(n_samples, dtype=bool)
+    tic2 = time.time()
+    tmp = np.array([])
     for i in range(n_samples):
+        tic3 = time.time()
         w_sample = construct_nn_input(w[i])
         alpha_rho = model(w_sample).numpy()[0]
         alpha_sample, rho_sample = decompose_dataset(
@@ -298,6 +304,13 @@ def get_D_nn(n_samples, w, model):
         D_pred = conclude_update(alpha_sample, rho_sample)
         D_nn[i] = reshape_to_flat(D_pred)
         D_nn_validity[i] = check_validity(D_pred)
+        toc3 = time.time()
+        if i % 200 == 1:
+            print(f"dnn latency for {i}th sample: {toc3-tic3} sec")
+            print(f"valid: {D_nn_validity[i]}")
+            tmp = np.append(tmp, toc3-tic3)
+    toc2 = time.time()
+    print(f"dnn latency for all {n_samples} samples: {toc2-tic2} sec")
     return D_nn, D_nn_validity
 
 
