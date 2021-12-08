@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_match
 
 INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1 (0 for fastest change)
@@ -12,14 +13,24 @@ np.set_printoptions(precision=2)
 
 def main():
     rng = np.random.default_rng(0)
-    w = np.random.uniform(0, 1, (N_NODE, N_NODE))
+    w = rng.uniform(0, 1, (N_NODE, N_NODE))
     print(f"weights:\n{w}")
-    alpha = np.zeros((N_NODE, N_NODE))
-    rho = np.zeros((N_NODE, N_NODE))
+    # alpha = np.zeros((N_NODE, N_NODE))
+    # rho = np.zeros((N_NODE, N_NODE))
+    alpha = w/2
+    rho = -w/2
+    (alpha_history,
+     rho_history) = alloc_history_arr(2)
+
     tic = time.time()
     for i in range(N_ITER):
         alpha = update_alpha(alpha, rho, w, bLogSumExp)
         rho = update_rho(alpha, rho, w, bLogSumExp)
+        alpha_history[:, i] = reshape_to_flat(alpha)
+        rho_history[:, i] = reshape_to_flat(rho)
+    
+    show_msg_changes_2(alpha_history, rho_history)
+
     print(f"alpha + rho: \n{alpha+rho}")
     D = conclude_update(alpha, rho)
     is_valid = check_validity(D)
@@ -80,26 +91,21 @@ def conclude_update(alpha, rho):
     return D
 
 
-def check_validity(D):
-    rowsum = np.sum(D, axis=0)
-    colsum = np.sum(D, axis=0)
-    if np.all(rowsum==1) and np.all(colsum==1):
-        return True
-    else:
-        return False
-
-
-def show_match(w, D):
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    ax.set_title('Preferences')
-    plt.imshow(w, origin='lower', cmap='gray')
-    plt.colorbar(orientation='vertical')
-    x = np.linspace(0, N_NODE-1, N_NODE)
-    y = np.argmax(D, axis=1)
-    plt.scatter(y, x,
-                marker='d',
-                color='red')
+def show_msg_changes_2(alpha_history,
+                     rho_history):
+    _, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,6))
+    axes[0].set_title('alpha')
+    axes[1].set_title('rho')
+    x = np.linspace(0, N_ITER-1, N_ITER)
+    for node_ij in range(N_NODE**2):
+        axes[0].plot(x, alpha_history[node_ij, :],
+                     "-o", markersize=3,
+                     color='red', alpha=0.2)
+        axes[0].set_xlim(xmin=0, xmax=N_ITER)
+        axes[1].plot(x, rho_history[node_ij, :],
+                     "-o", markersize=3,
+                     color='green', alpha=0.2)
+        axes[1].set_xlim(xmin=0, xmax=N_ITER)
     plt.show()
 
 

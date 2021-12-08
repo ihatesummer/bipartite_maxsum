@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1. 0 for fastest change.
@@ -28,11 +29,10 @@ def main():
     # rho = init_normal(rng)
     # beta = init_normal(rng)
 
-    alpha_history = alloc_history_arr()
-    eta_history = alloc_history_arr()
-    rho_history = alloc_history_arr()
-    beta_history = alloc_history_arr()
-
+    (alpha_history, eta_history,
+     rho_history, beta_history) = alloc_history_arr(4)
+    print(alpha_history)
+    tic = time.time()
     for i in range(N_ITER):
         print("="*10 + f"iter {i}" + "="*10)
         D_old = eta + alpha + w
@@ -41,7 +41,7 @@ def main():
         eta = update_eta(eta, beta)
         rho = update_rho(rho, eta, w)
         beta = update_beta(beta, alpha, w)
-        print(f"alpha:\n{alpha}")
+        # print(f"alpha:\n{alpha}")
         # print(f"eta:\n{eta}")
         # print(f"rho:\n{rho}")
         # print(f"beta:\n{beta}")
@@ -50,15 +50,9 @@ def main():
         eta_history[:, i] = reshape_to_flat(eta)
         rho_history[:, i] = reshape_to_flat(rho)
         beta_history[:, i] = reshape_to_flat(beta)
-
-        print("mean(alpha_new-alpha_old): ",
-              np.mean(np.abs(alpha_history[:, i]
-               - alpha_history[:, i-1])))
     
-    show_msg_changes(alpha_history,
-                     eta_history,
-                     rho_history,
-                     beta_history)
+    show_msg_changes_4(alpha_history, eta_history,
+                     rho_history, beta_history)
 
     D_final = eta + alpha + w
     print(f"D:\n{D_final}")
@@ -66,7 +60,8 @@ def main():
         idx_max = np.argmax(D_final[row, :])
         D_final[row, :] = 0
         D_final[row, idx_max] = 1
-
+    toc = time.time()
+    print(f"matching time: {(toc - tic)*1000}ms")
     is_valid = check_validity(D_final)
     if is_valid:
         print("Successful bipartite matching " + 
@@ -76,16 +71,16 @@ def main():
         print("Pairing unsucessful.")
 
 
-def alloc_history_arr():
-    return np.zeros((N_NODE**2, N_ITER))
+def alloc_history_arr(n_arrays):
+    arr = np.zeros((N_NODE**2, N_ITER))
+    return_list = []
+    for i in range(n_arrays):
+        return_list.append(arr)
+    return return_list
 
 
 def init_normal(rng):
     return rng.normal(size=(N_NODE, N_NODE))
-
-
-def init_zeros():
-    return np.zeros(N_NODE, N_NODE)
 
 
 def reshape_to_flat(square_array):
@@ -126,7 +121,7 @@ def update_eta(eta, beta):
     return new*(1-DAMP) + old*(DAMP)
 
 
-def show_msg_changes(alpha_history,
+def show_msg_changes_4(alpha_history,
                      eta_history,
                      rho_history,
                      beta_history):
@@ -138,16 +133,20 @@ def show_msg_changes(alpha_history,
     x = np.linspace(0, N_ITER-1, N_ITER)
     for node_ij in range(N_NODE**2):
         axes[0, 0].plot(x, alpha_history[node_ij, :],
-                     "-o", color='red', alpha=0.2)
+                     "-o", markersize=3,
+                     color='red', alpha=0.2)
         axes[0, 0].set_xlim(xmin=0, xmax=N_ITER)
         axes[0, 1].plot(x, eta_history[node_ij, :],
-                     "-o", color='blue', alpha=0.2)
+                     "-o", markersize=3,
+                     color='blue', alpha=0.2)
         axes[0, 1].set_xlim(xmin=0, xmax=N_ITER)
         axes[1, 0].plot(x, rho_history[node_ij, :],
-                     "-o", color='green', alpha=0.2)
+                     "-o", markersize=3,
+                     color='green', alpha=0.2)
         axes[1, 0].set_xlim(xmin=0, xmax=N_ITER)
         axes[1, 1].plot(x, beta_history[node_ij, :],
-                     "-o", color='brown', alpha=0.2)
+                     "-o", markersize=3,
+                     color='brown', alpha=0.2)
         axes[1, 1].set_xlim(xmin=0, xmax=N_ITER)
     plt.show()
 

@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_match
+from maxsum_condensed import show_msg_changes_2, log_sum_exp, conclude_update
 
 INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1 (0 for fastest change)
@@ -12,14 +14,22 @@ np.set_printoptions(precision=2)
 
 def main():
     rng = np.random.default_rng(0)
-    w = np.random.uniform(0, 1, (N_NODE, N_NODE))
+    w = rng.uniform(0, 1, (N_NODE, N_NODE))
     print(f"weights:\n{w}")
     alpha = np.zeros((N_NODE, N_NODE))
     rho = np.zeros((N_NODE, N_NODE))
+    (alpha_history,
+     rho_history) = alloc_history_arr(2)
+
     tic = time.time()
     for i in range(N_ITER):
         alpha = update_alpha(alpha, rho, w, bLogSumExp)
         rho = update_rho(alpha, rho, w, bLogSumExp)
+        alpha_history[:, i] = reshape_to_flat(alpha)
+        rho_history[:, i] = reshape_to_flat(rho)
+    
+    show_msg_changes_2(alpha_history, rho_history)
+
     print(f"alpha + rho: \n{alpha+rho}")
     D = conclude_update(alpha, rho)
     is_valid = check_validity(D)
@@ -33,22 +43,18 @@ def main():
         print("Pairing unsucessful.")
 
 
-def log_sum_exp(input_array):
-    return np.log(np.sum(np.exp(input_array)))
-
-
 def update_alpha(alpha, rho, w, bLogSumExp):
     old = alpha
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
         for j in range(N_NODE):
-            tmp = rho + w/2
+            tmp = np.copy(rho)
             if bLogSumExp:
                 tmp_ith_row_except_ij = np.delete(tmp[i, :], j)
-                new[i, j] = w[i, j]/2 - log_sum_exp(tmp_ith_row_except_ij)
+                new[i, j] = -log_sum_exp(tmp_ith_row_except_ij)
             else:
                 tmp[i, j] = -INF
-                new[i, j] = w[i, j]/2 - max(tmp[i, :])
+                new[i, j] = -max(tmp[i, :])
     return new*(1-DAMP) + old*(DAMP)
 
 
@@ -57,50 +63,14 @@ def update_rho(alpha, rho, w, bLogSumExp):
     new = np.zeros(((N_NODE, N_NODE)))
     for i in range(N_NODE):
         for j in range(N_NODE):
-            tmp = alpha + w/2
+            tmp = alpha + w
             if bLogSumExp:
                 tmp_jth_col_except_ij = np.delete(tmp[:, j], i)
-                new[i, j] = w[i, j]/2 - log_sum_exp(tmp_jth_col_except_ij)
+                new[i, j] = w[i, j] - log_sum_exp(tmp_jth_col_except_ij)
             else:
                 tmp[i, j] = -INF
-                new[i, j] = w[i, j]/2 - max(tmp[:, j])
+                new[i, j] = w[i, j] - max(tmp[:, j])
     return new*(1-DAMP) + old*(DAMP)
-
-
-def conclude_update(alpha, rho):
-    D = rho + alpha
-    # print(f"final alpha:\n{alpha}")
-    # print(f"final rho:\n{rho}")
-    # print(f"alpha+rho:\n{D}")
-    for row in range(N_NODE):
-        idx_max = np.argmax(D[row, :])
-        D[row, :] = 0
-        D[row, idx_max] = 1
-    # print(f"D:\n{D}")
-    return D
-
-
-def check_validity(D):
-    rowsum = np.sum(D, axis=0)
-    colsum = np.sum(D, axis=0)
-    if np.all(rowsum==1) and np.all(colsum==1):
-        return True
-    else:
-        return False
-
-
-def show_match(w, D):
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    ax.set_title('Preferences')
-    plt.imshow(w, origin='lower', cmap='gray')
-    plt.colorbar(orientation='vertical')
-    x = np.linspace(0, N_NODE-1, N_NODE)
-    y = np.argmax(D, axis=1)
-    plt.scatter(y, x,
-                marker='d',
-                color='red')
-    plt.show()
 
 
 if __name__=="__main__":
