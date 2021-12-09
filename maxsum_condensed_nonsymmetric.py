@@ -5,7 +5,7 @@ from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_matc
 from maxsum_condensed import show_msg_changes_2, log_sum_exp, conclude_update
 
 INF = 10**60  # infinity
-DAMP = 0.0  # between 0 and 1 (0 for fastest change)
+DAMP = 0  # between 0 and 1 (0 for fastest change)
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*10
 bLogSumExp = False

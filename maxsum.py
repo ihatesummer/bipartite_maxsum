@@ -14,12 +14,12 @@ def main():
     rng = np.random.default_rng(0)
     w = rng.uniform(0, 1, (N_NODE, N_NODE))
     # w = np.array(
-    #     [[2, 4, 2, 2, 2],
-    #      [4, 2, 2, 2, 2],
-    #      [2, 2, 4, 2, 2],
-    #      [2, 2, 2, 4, 2],
-    #      [2, 2, 2, 2, 4]])
-    print(f"weights:\n{w}")
+    #     [[0.99, 1.00, 0.99, 0.99, 0.99],
+    #      [1.00, 1.00, 0.99, 0.99, 0.99],
+    #      [0.99, 0.99, 1.00, 0.99, 0.99],
+    #      [0.99, 0.99, 1.00, 1.00, 0.99],
+    #      [0.99, 0.99, 0.99, 1.00, 1.00]])
+    # print(f"weights:\n{w}")
     alpha = np.zeros((N_NODE, N_NODE))
     eta = np.zeros((N_NODE, N_NODE))
     rho = np.zeros((N_NODE, N_NODE))
