@@ -6,13 +6,13 @@ from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_matc
 INF = 10**60  # infinity
 DAMP = 0.0  # between 0 and 1 (0 for fastest change)
 N_NODE = 5  # number of nodes per group
-N_ITER = N_NODE*10
+N_ITER = 20
 bLogSumExp = False
 np.set_printoptions(precision=2)
 
 
 def main():
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(1)
     w = rng.uniform(0, 1, (N_NODE, N_NODE))
     print(f"weights:\n{w}")
     # alpha = np.zeros((N_NODE, N_NODE))
@@ -28,6 +28,8 @@ def main():
         rho = update_rho(alpha, rho, w, bLogSumExp)
         alpha_history[:, i] = reshape_to_flat(alpha)
         rho_history[:, i] = reshape_to_flat(rho)
+        if i>2:
+            print(alpha_history[:, i]-alpha_history[:, i-1])
     
     show_msg_changes_2(alpha_history, rho_history)
 

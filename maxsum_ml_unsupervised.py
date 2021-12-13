@@ -3,6 +3,7 @@ import numpy as np
 import time
 import os as os
 from sklearn.model_selection import train_test_split
+from tensorflow.python.ops.gen_batch_ops import batch
 from maxsum_condensed import (update_alpha, update_rho,
                               conclude_update,
                               check_validity)
@@ -10,7 +11,7 @@ from maxsum_condensed import (update_alpha, update_rho,
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
 N_ITER = N_NODE*4
-N_DATASET = 10000
+N_DATASET = 100000
 bLogSumExp = False
 filenames = {
     "w": f"{N_NODE}-by-{N_NODE} - w.csv",
@@ -28,35 +29,54 @@ def main():
     dataset_alpha_rho_star = np.concatenate((alpha_star,
                                              rho_star),
                                             axis=1)
-    n_samples_to_use = N_DATASET
+
     (w_train, w_test,
-     alpha_rho_star_train,
-     alpha_rho_star_test) = train_test_split(
-         dataset_w[:n_samples_to_use, :],
-         dataset_alpha_rho_star[:n_samples_to_use, :],
-         test_size=0.2,
-         shuffle=True)
+     _, alpha_rho_star_test) = train_test_split(
+         dataset_w[:N_DATASET, :],
+         dataset_alpha_rho_star[:N_DATASET, :],
+         test_size=0.2, shuffle=True)
+
+    w_train_tensor = tf.data.Dataset.from_tensor_slices((w_train))
+    model = initialize_model()
     try:
-        model = initialize_model()
         model.load_weights(FILENAME_NN_WEIGHT)
         print("Trained NN weights loaded.")
         print(model.summary())
     except:
-        model = initialize_model()
         print("Training NN.")
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        optimizer = tf.keras.optimizers.Nadam()
         loss_fxn = tf.keras.losses.MeanSquaredError()
         n_epochs = 10
+        batch_size = 1000
+
+        w_train_minibatches = w_train_tensor.batch(batch_size)
+
         for epoch in range(n_epochs):
-            print(f"Starting epoch {epoch}...")
-            for step, w_sample in enumerate(w_train):
+            for step, w_minibatch in enumerate(w_train_minibatches):
                 with tf.GradientTape() as tape:
-                    w_in = construct_nn_input(w_sample)
-                    alpha_rho = model(w_in, training=True)
-                    alpha_rho_passed = forward_pass(w_sample, alpha_rho)
+                    alpha_rho_minibatch = np.array([])
+                    alpha_rho_passed_minibatch = np.array([])
+                    for w_sample in w_minibatch:
+                        w_in = construct_nn_input(w_sample.numpy())
+                        alpha_rho = model(w_in, training=True)
+                        alpha_rho_minibatch = np.append(
+                            alpha_rho_minibatch,
+                            alpha_rho)
+                        alpha_rho_passed = forward_pass(w_sample, alpha_rho)
+                        alpha_rho_passed_minibatch = np.append(
+                            alpha_rho_passed_minibatch,
+                            alpha_rho_passed)
+                    
+                    alpha_rho_minibatch = np.reshape(
+                        alpha_rho_minibatch,
+                        (batch_size, (N_NODE**2)*2))
+                    alpha_rho_passed_minibatch = np.reshape(
+                        alpha_rho_passed_minibatch,
+                        (batch_size, (N_NODE**2)*2))
                     loss_value = loss_fxn(alpha_rho, alpha_rho_passed)
+                    print(loss_value)
                 grads = tape.gradient(loss_value,
-                                    model.trainable_weights)
+                                      model.trainable_weights)
                 optimizer.apply_gradients(
                     zip(grads, model.trainable_weights))
                 log_interval = 1000
@@ -279,24 +299,19 @@ def run_test_matching(w, alpha_rho_star, model):
 def get_D_mp(n_samples, alpha_rho_star):
     D_mp = np.zeros((n_samples, N_NODE**2), dtype=int)
     D_mp_validity = np.zeros(n_samples, dtype=bool)
-    tic4 = time.time()
     for i in range(n_samples):
         alpha_star, rho_star = decompose_dataset(alpha_rho_star[i], 'output')
         D_pred = conclude_update(alpha_star, rho_star)
         D_mp[i] = reshape_to_flat(D_pred)
         D_mp_validity[i] = check_validity(D_pred)
-    toc4 = time.time()
-    print(f"toc4: {(toc4-tic4)/n_samples}")
     return D_mp, D_mp_validity
 
 
 def get_D_nn(n_samples, w, model):
     D_nn = np.zeros((n_samples, N_NODE**2), dtype=int)
     D_nn_validity = np.zeros(n_samples, dtype=bool)
-    tic2 = time.time()
     tmp = np.array([])
     for i in range(n_samples):
-        tic3 = time.time()
         w_sample = construct_nn_input(w[i])
         alpha_rho = model(w_sample).numpy()[0]
         alpha_sample, rho_sample = decompose_dataset(
@@ -304,13 +319,6 @@ def get_D_nn(n_samples, w, model):
         D_pred = conclude_update(alpha_sample, rho_sample)
         D_nn[i] = reshape_to_flat(D_pred)
         D_nn_validity[i] = check_validity(D_pred)
-        toc3 = time.time()
-        if i % 200 == 1:
-            print(f"dnn latency for {i}th sample: {toc3-tic3} sec")
-            print(f"valid: {D_nn_validity[i]}")
-            tmp = np.append(tmp, toc3-tic3)
-    toc2 = time.time()
-    print(f"dnn latency for all {n_samples} samples: {toc2-tic2} sec")
     return D_nn, D_nn_validity
 
 
