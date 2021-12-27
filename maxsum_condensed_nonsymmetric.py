@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_match
-from maxsum_condensed import show_msg_changes_2, log_sum_exp, get_pairing_matrix
+from maxsum import reshape_to_flat, check_validity, get_pairing_matrix, show_match
+from maxsum_condensed import show_msg_changes_2, log_sum_exp
 
 INF = 10**60  # infinity
 DAMP = 0  # between 0 and 1 (0 for fastest change)
@@ -18,8 +18,8 @@ def main():
     print(f"weights:\n{w}")
     alpha = np.zeros((N_NODE, N_NODE))
     rho = np.zeros((N_NODE, N_NODE))
-    (alpha_history,
-     rho_history) = alloc_history_arr(2)
+    alpha_history = np.zeros((N_NODE**2, N_ITER))
+    rho_history = np.zeros((N_NODE**2, N_ITER))
 
     tic = time.time()
     for i in range(N_ITER):

@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from maxsum import reshape_to_flat, reshape_to_square, check_validity, show_match
+from maxsum import reshape_to_flat, reshape_to_square, check_validity, show_match, get_pairing_matrix
 
 INF = 10**60  # infinity
 DAMP = 0  # between 0 and 1 (0 for fastest change)
@@ -82,19 +82,6 @@ def update_rho(alpha, rho, w, bLogSumExp):
                 tmp[i, j] = -INF
                 new[i, j] = w[i, j]/2 - max(tmp[:, j])
     return new*(1-DAMP) + old*(DAMP)
-
-
-def get_pairing_matrix(alpha, rho):
-    D = rho + alpha
-    # print(f"final alpha:\n{alpha}")
-    # print(f"final rho:\n{rho}")
-    # print(f"alpha+rho:\n{D}")
-    for row in range(N_NODE):
-        idx_max = np.argmax(D[row, :])
-        D[row, :] = 0
-        D[row, idx_max] = 1
-    # print(f"D:\n{D}")
-    return D
 
 
 def show_msg_changes_2(alpha_history,

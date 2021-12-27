@@ -3,9 +3,8 @@ import numpy as np
 import time
 import os as os
 from sklearn.model_selection import train_test_split
+from maxsum import check_validity, get_pairing_matrix
 from maxsum_condensed import (update_alpha, update_rho,
-                              get_pairing_matrix,
-                              check_validity,
                               show_match)
 
 np.set_printoptions(precision=2)

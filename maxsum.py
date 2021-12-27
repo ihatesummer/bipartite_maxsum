@@ -118,6 +118,19 @@ def update_eta(eta, beta):
     return new*(1-DAMP) + old*(DAMP)
 
 
+def get_pairing_matrix(alpha, rho):
+    D = rho + alpha
+    # print(f"final alpha:\n{alpha}")
+    # print(f"final rho:\n{rho}")
+    # print(f"alpha+rho:\n{D}")
+    for row in range(N_NODE):
+        idx_max = np.argmax(D[row, :])
+        D[row, :] = 0
+        D[row, idx_max] = 1
+    # print(f"D:\n{D}")
+    return D
+
+
 def show_msg_changes_4(alpha_history,
                      eta_history,
                      rho_history,

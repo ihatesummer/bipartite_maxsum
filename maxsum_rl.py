@@ -1,6 +1,5 @@
-from maxsum import check_validity, reshape_to_flat, reshape_to_square
-from maxsum_condensed import get_pairing_matrix
-from maxsum_ml_unsupervised import(fetch_dataset, forward_pass, decompose_dataset)
+from maxsum import check_validity, get_pairing_matrix, reshape_to_flat, reshape_to_square
+from maxsum_ul import fetch_dataset, forward_pass, decompose_dataset
 from torch.distributions import Normal
 import numpy as np
 import torch
@@ -26,9 +25,7 @@ SEED_W = 0
 
 def main():
     (w, alpha_star, rho_star) = fetch_dataset()
-    alpha_rho_star = np.concatenate((alpha_star, rho_star),
-                                    axis=1)
-    D_mp = get_pairing(alpha_rho_star[0])
+    D_mp = get_pairing_matrix(alpha_star[0], rho_star[0])
     print(f"D (mp):\n{D_mp}")
 
     pi = Pi(DIM_IN, DIM_OUT)
@@ -158,18 +155,6 @@ def train(pi, optimizer):
     # print(f"loss: {loss}")
     # print(f"loss (sum): {loss_sum}")
     return loss_sum
-
-
-def get_pairing(alpha_rho):
-    alpha, rho = decompose_dataset(
-        alpha_rho, 'output')
-    alpha = reshape_to_square(alpha, N_NODE)
-    rho = reshape_to_square(rho, N_NODE)
-    # print("MP:")
-    # print(f"alpha:\n{alpha}")
-    # print(f"rho:\n{rho}")
-    # print(f"sum:\n{alpha+rho}")
-    return get_pairing_matrix(alpha, rho)
 
 
 def evaluate_policy(pi):
