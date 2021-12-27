@@ -25,7 +25,8 @@ SEED_W = 0
 
 def main():
     (w, alpha_star, rho_star) = fetch_dataset()
-    D_mp = get_pairing_matrix(alpha_star[0], rho_star[0])
+    D_mp = get_pairing_matrix(reshape_to_square(alpha_star[0], N_NODE),
+                              reshape_to_square(rho_star[0], N_NODE))
     print(f"D (mp):\n{D_mp}")
 
     pi = Pi(DIM_IN, DIM_OUT)
