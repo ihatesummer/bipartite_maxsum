@@ -1,7 +1,12 @@
-import numpy as np
-import tensorflow as tf
+import torch
+from torch.distributions import Normal
+print(torch.cuda.is_available())
 
-a = np.array([1,2,3])
-b = np.append(a, a)
-c = np.reshape(b, (2, 3))
-print(c)
+means = (torch.zeros((1, 5), requires_grad=True))
+print(f"means: {means}")
+pd = Normal(loc=means, scale=1)
+print(f"pd: {pd}")
+action = pd.sample()
+print(f"action: {action}")
+log_prob = pd.log_prob(action)
+print(f"log_prob: {log_prob}")

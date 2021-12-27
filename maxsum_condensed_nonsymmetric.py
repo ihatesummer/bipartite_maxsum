@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_match
-from maxsum_condensed import show_msg_changes_2, log_sum_exp, conclude_update
+from maxsum_condensed import show_msg_changes_2, log_sum_exp, get_pairing_matrix
 
 INF = 10**60  # infinity
 DAMP = 0  # between 0 and 1 (0 for fastest change)
@@ -31,7 +31,7 @@ def main():
     show_msg_changes_2(alpha_history, rho_history)
 
     print(f"alpha + rho: \n{alpha+rho}")
-    D = conclude_update(alpha, rho)
+    D = get_pairing_matrix(alpha, rho)
     is_valid = check_validity(D)
     toc = time.time()
     print(f"matching time: {(toc - tic)*1000}ms")

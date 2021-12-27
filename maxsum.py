@@ -29,9 +29,10 @@ def main():
     # rho = init_normal(rng)
     # beta = init_normal(rng)
 
-    (alpha_history, eta_history,
-     rho_history, beta_history) = alloc_history_arr(4)
-    print(alpha_history)
+    alpha_history = np.zeros((N_NODE**2, N_ITER))
+    eta_history = np.zeros((N_NODE**2, N_ITER))
+    rho_history  = np.zeros((N_NODE**2, N_ITER))
+    beta_history = np.zeros((N_NODE**2, N_ITER))
     tic = time.time()
     for i in range(N_ITER):
         print("="*10 + f"iter {i}" + "="*10)
@@ -71,20 +72,16 @@ def main():
         print("Pairing unsucessful.")
 
 
-def alloc_history_arr(n_arrays):
-    arr = np.zeros((N_NODE**2, N_ITER))
-    return_list = []
-    for i in range(n_arrays):
-        return_list.append(arr)
-    return return_list
-
-
 def init_normal(rng):
     return rng.normal(size=(N_NODE, N_NODE))
 
 
-def reshape_to_flat(square_array):
-    return np.reshape(square_array, N_NODE**2)
+def reshape_to_flat(square_array, n_node):
+    return np.reshape(square_array, n_node**2)
+
+
+def reshape_to_square(flat_array, n_node):
+    return np.reshape(flat_array, (n_node, n_node))
 
 
 def update_beta(beta, alpha, w):

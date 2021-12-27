@@ -3,15 +3,14 @@ import numpy as np
 import time
 import os as os
 from sklearn.model_selection import train_test_split
-from tensorflow.python.ops.gen_batch_ops import batch
 from maxsum_condensed import (update_alpha, update_rho,
-                              conclude_update,
+                              get_pairing_matrix,
                               check_validity)
 
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
-N_ITER = N_NODE*4
-N_DATASET = 100000
+N_ITER = 20
+N_DATASET = 10000
 bLogSumExp = False
 filenames = {
     "w": f"{N_NODE}-by-{N_NODE} - w.csv",
@@ -31,7 +30,8 @@ def main():
                                             axis=1)
 
     (w_train, w_test,
-     _, alpha_rho_star_test) = train_test_split(
+     alpha_rho_star_train,
+     alpha_rho_star_test) = train_test_split(
          dataset_w[:N_DATASET, :],
          dataset_alpha_rho_star[:N_DATASET, :],
          test_size=0.2, shuffle=True)
@@ -45,14 +45,14 @@ def main():
     except:
         print("Training NN.")
         optimizer = tf.keras.optimizers.Nadam()
-        loss_fxn = tf.keras.losses.MeanSquaredError()
-        n_epochs = 10
-        batch_size = 1000
+        loss_fxn = tf.keras.losses.MeanAbsoluteError()
+        n_epochs = 20
+        batch_size = 2000
 
         w_train_minibatches = w_train_tensor.batch(batch_size)
 
         for epoch in range(n_epochs):
-            for step, w_minibatch in enumerate(w_train_minibatches):
+            for batch_no, w_minibatch in enumerate(w_train_minibatches):
                 with tf.GradientTape() as tape:
                     alpha_rho_minibatch = np.array([])
                     alpha_rho_passed_minibatch = np.array([])
@@ -74,17 +74,15 @@ def main():
                         alpha_rho_passed_minibatch,
                         (batch_size, (N_NODE**2)*2))
                     loss_value = loss_fxn(alpha_rho, alpha_rho_passed)
-                    print(loss_value)
                 grads = tape.gradient(loss_value,
                                       model.trainable_weights)
                 optimizer.apply_gradients(
                     zip(grads, model.trainable_weights))
-                log_interval = 1000
-                if step % log_interval == 0:
-                    print(f"Epoch {epoch}, step {step}: loss={loss_value}")
+                print(f"Epoch {epoch}, batch#{batch_no}: loss={loss_value}")
+            print("\n")
         model.save_weights(FILENAME_NN_WEIGHT)
     run_test_matching(w_test, alpha_rho_star_test, model)
- 
+
 
 def fetch_dataset():
     bAvailable = check_dataset_availability()
@@ -106,7 +104,7 @@ def check_dataset_availability():
 
 
 def generate_and_write_dataset():
-    w = generate_dataset_input_easy(unif_ub=0.8)
+    w = generate_dataset_input_easy(unif_ub=1.0)
     np.savetxt(filenames['w'], w, delimiter=',')
     alpha_star, rho_star = generate_dataset_output(w)
     np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
@@ -280,7 +278,14 @@ def run_test_matching(w, alpha_rho_star, model):
 
     D_nn, D_nn_validity = get_D_nn(n_samples, w, model)
     print("NN performance:")
+
     print_assessment(D_nn_validity, n_samples)
+    
+    acc = np.array([])
+    for d_nn, d_mp in zip(D_nn, D_mp):
+        acc = np.append(acc, np.all(d_nn == d_mp))
+    print(np.count_nonzero(acc)/np.size(acc)*100, "% acc")
+
 
     # idx_valid_samples = np.where(D_nn_validity==True)[0]
     # print("valid idices: ", idx_valid_samples)
@@ -301,7 +306,7 @@ def get_D_mp(n_samples, alpha_rho_star):
     D_mp_validity = np.zeros(n_samples, dtype=bool)
     for i in range(n_samples):
         alpha_star, rho_star = decompose_dataset(alpha_rho_star[i], 'output')
-        D_pred = conclude_update(alpha_star, rho_star)
+        D_pred = get_pairing_matrix(alpha_star, rho_star)
         D_mp[i] = reshape_to_flat(D_pred)
         D_mp_validity[i] = check_validity(D_pred)
     return D_mp, D_mp_validity
@@ -310,13 +315,12 @@ def get_D_mp(n_samples, alpha_rho_star):
 def get_D_nn(n_samples, w, model):
     D_nn = np.zeros((n_samples, N_NODE**2), dtype=int)
     D_nn_validity = np.zeros(n_samples, dtype=bool)
-    tmp = np.array([])
     for i in range(n_samples):
         w_sample = construct_nn_input(w[i])
         alpha_rho = model(w_sample).numpy()[0]
         alpha_sample, rho_sample = decompose_dataset(
             alpha_rho, 'output')
-        D_pred = conclude_update(alpha_sample, rho_sample)
+        D_pred = get_pairing_matrix(alpha_sample, rho_sample)
         D_nn[i] = reshape_to_flat(D_pred)
         D_nn_validity[i] = check_validity(D_pred)
     return D_nn, D_nn_validity

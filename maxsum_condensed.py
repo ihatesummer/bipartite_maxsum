@@ -1,10 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from maxsum import alloc_history_arr, reshape_to_flat, check_validity, show_match
+from maxsum import reshape_to_flat, reshape_to_square, check_validity, show_match
 
 INF = 10**60  # infinity
-DAMP = 0.0  # between 0 and 1 (0 for fastest change)
+DAMP = 0  # between 0 and 1 (0 for fastest change)
 N_NODE = 5  # number of nodes per group
 N_ITER = 20
 bLogSumExp = False
@@ -19,22 +19,25 @@ def main():
     # rho = np.zeros((N_NODE, N_NODE))
     alpha = w/2
     rho = -w/2
-    (alpha_history,
-     rho_history) = alloc_history_arr(2)
+    alpha_history = np.zeros((N_NODE**2, N_ITER))
+    rho_history = np.zeros((N_NODE**2, N_ITER))
 
     tic = time.time()
     for i in range(N_ITER):
         alpha = update_alpha(alpha, rho, w, bLogSumExp)
         rho = update_rho(alpha, rho, w, bLogSumExp)
-        alpha_history[:, i] = reshape_to_flat(alpha)
-        rho_history[:, i] = reshape_to_flat(rho)
-        if i>2:
-            print(alpha_history[:, i]-alpha_history[:, i-1])
+        alpha_history[:, i] = reshape_to_flat(alpha, N_NODE)
+        rho_history[:, i] = reshape_to_flat(rho, N_NODE)
+        if i>0:
+            print(f"\n{i}th iteration:")
+            print(f"alpha diff:\n{reshape_to_square(alpha_history[:,i]-alpha_history[:,i-1], N_NODE)}")
+            print(f"rho diff:\n{reshape_to_square(rho_history[:,i]-rho_history[:,i-1], N_NODE)}")
+            print(f"alpha + rho: \n{alpha+rho}")
     
     show_msg_changes_2(alpha_history, rho_history)
 
     print(f"alpha + rho: \n{alpha+rho}")
-    D = conclude_update(alpha, rho)
+    D = get_pairing_matrix(alpha, rho)
     is_valid = check_validity(D)
     toc = time.time()
     print(f"matching time: {(toc - tic)*1000}ms")
@@ -62,6 +65,7 @@ def update_alpha(alpha, rho, w, bLogSumExp):
             else:
                 tmp[i, j] = -INF
                 new[i, j] = w[i, j]/2 - max(tmp[i, :])
+                
     return new*(1-DAMP) + old*(DAMP)
 
 
@@ -80,7 +84,7 @@ def update_rho(alpha, rho, w, bLogSumExp):
     return new*(1-DAMP) + old*(DAMP)
 
 
-def conclude_update(alpha, rho):
+def get_pairing_matrix(alpha, rho):
     D = rho + alpha
     # print(f"final alpha:\n{alpha}")
     # print(f"final rho:\n{rho}")
@@ -94,7 +98,7 @@ def conclude_update(alpha, rho):
 
 
 def show_msg_changes_2(alpha_history,
-                     rho_history):
+                       rho_history):
     _, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,6))
     axes[0].set_title('alpha')
     axes[1].set_title('rho')
