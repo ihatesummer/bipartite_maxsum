@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=2)
 GAMMA = 0.99
-N_EPISODE = 5000
+N_EPISODE = 3000
 MAX_TIMESTEP = 20
 N_NODE = 5  # number of nodes per group
 DIM_IN = 2*(N_NODE**2)
@@ -125,7 +125,7 @@ class Pi(nn.Module):
 
     def act(self, state):
         means = self.forward(state)
-        pd = Normal(loc=means, scale=0.5) # probability distribution
+        pd = Normal(loc=means, scale=0.1) # probability distribution
         action = pd.sample() # pi(a|s) in action via pd
         log_prob = torch.sum(pd.log_prob(action)) # log_prob of pi(a|s)
         self.log_probs.append(log_prob) # store for training
@@ -145,7 +145,7 @@ def train(pi, optimizer):
     return_baseline = torch.mean(returns)
     log_probs_sum = torch.stack(pi.log_probs)
     # loss = - log_probs_sum * (returns-return_baseline)
-    loss = log_probs_sum * (returns)
+    loss = - log_probs_sum * (returns)
     loss_sum = torch.sum(loss)
     optimizer.zero_grad()
     loss_sum.backward()  # backpropagate, compute gradients
