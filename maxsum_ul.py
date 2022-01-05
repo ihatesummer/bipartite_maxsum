@@ -1,29 +1,34 @@
+import re
 import tensorflow as tf
 import numpy as np
 import time
 import os as os
 from sklearn.model_selection import train_test_split
 from maxsum_condensed import (update_alpha, update_rho,
-                              get_pairing_matrix,
+                              get_pairing_matrix_argmax,
                               check_validity)
 
 np.set_printoptions(precision=2)
 N_NODE = 5  # number of nodes per group
-N_ITER = 20
+N_ITER = 10
 N_DATASET = 10000
 bLogSumExp = False
-filenames = {
+FILENAMES = {
     "w": f"{N_NODE}-by-{N_NODE} - w.csv",
     "alpha_star": f"{N_NODE}-by-{N_NODE} - alpha_star.csv",
-    "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv"
+    "rho_star": f"{N_NODE}-by-{N_NODE} - rho_star.csv",
+    "pos_bs": f"{N_NODE}_bs_positions.npy",
+    "pos_user": f"{N_NODE}_user_positions.npy",
+    "nn_weight": "weights_ul.h5"
 }
-FILENAME_NN_WEIGHT = "weights_unsupervised.h5"
 # FILENAME_NN_WEIGHT = "weights_unsupervised_gyh_30.h5"
 SEED_W = 0
 
 
 def main():
-    (w, alpha_star, rho_star) = fetch_dataset()
+    pos_bs, pos_user, w, alpha_star, rho_star = get_datasets(
+        FILENAMES, N_DATASET, SEED_W, N_NODE, "unif_easy")
+
     dataset_w = w
     dataset_alpha_rho_star = np.concatenate((alpha_star,
                                              rho_star),
@@ -39,7 +44,7 @@ def main():
     w_train_tensor = tf.data.Dataset.from_tensor_slices((w_train))
     model = initialize_model()
     try:
-        model.load_weights(FILENAME_NN_WEIGHT)
+        model.load_weights(FILENAMES["nn_weight"])
         print("Trained NN weights loaded.")
         print(model.summary())
     except:
@@ -80,100 +85,101 @@ def main():
                     zip(grads, model.trainable_weights))
                 print(f"Epoch {epoch}, batch#{batch_no}: loss={loss_value}")
             print("\n")
-        model.save_weights(FILENAME_NN_WEIGHT)
+        model.save_weights(FILENAMES["nn_weight"])
     run_test_matching(w_test, alpha_rho_star_test, model)
 
 
-def fetch_dataset():
-    bAvailable = check_dataset_availability()
-    if not bAvailable:
-        (w, alpha_star, rho_star) = generate_and_write_dataset()
-        print("Dataset generated.")
-    else:
-        (w, alpha_star, rho_star) = read_dataset()
-        print("Dataset loaded.")
-    return (w, alpha_star, rho_star)
-
-
-def check_dataset_availability():
-    bAvailable = []
-    for entry in filenames:
-        filename = filenames[entry]
-        bAvailable.append(os.path.exists(filename))
-    return all(bAvailable)
-
-
-def generate_and_write_dataset():
-    w = generate_dataset_input_easy(unif_ub=1.0)
-    np.savetxt(filenames['w'], w, delimiter=',')
-    alpha_star, rho_star = generate_dataset_output(w)
-    np.savetxt(filenames['alpha_star'], alpha_star, delimiter=',')
-    np.savetxt(filenames['rho_star'], rho_star, delimiter=',')
-    return (w, alpha_star, rho_star)
-
-
-def generate_dataset_input():
-    for i in range(N_DATASET):
-        rng = np.random.default_rng(SEED_W+i)
-        w_instance = rng.uniform(0, 1, (1, N_NODE**2))
-        if i==0:
-            w = w_instance
+def get_datasets(filename_dict, n_dataset, seed, n_node, w_mode):
+    try:
+        if w_mode == "geographic":
+            pos_bs = np.load(filename_dict["pos_bs"])
+            pos_user = np.load(filename_dict["pos_user"])
         else:
-            w = np.append(w, w_instance, axis=0)
+            pos_bs = None
+            pos_user = None
+        w = np.loadtxt(filename_dict["w"], dtype=float, delimiter=',')
+        alpha_star = np.loadtxt(filename_dict["alpha_star"], dtype=float, delimiter=',')
+        rho_star = np.loadtxt(filename_dict["rho_star"], dtype=float, delimiter=',')
+    except Exception as e:
+        print(f"Exception: {e}\nGenerating datasets...")
+        print(f"Weight generation mode: {w_mode}")
+        if w_mode == "unif":
+            w = generate_w_unif(n_dataset, seed, n_node)
+            pos_bs, pos_user = None, None
+        elif w_mode == "unif_easy":
+            w = generate_w_unif_easy(n_dataset, seed, n_node, unif_ub=1.0)
+            pos_bs, pos_user = None, None
+        elif w_mode == "geographic":
+            pos_bs, pos_user, w = generate_w_geographic(
+                n_dataset, seed, n_node, 10)
+            np.save(filename_dict["pos_bs"], pos_bs)
+            np.save(filename_dict["pos_user"], pos_user)
+        np.savetxt(filename_dict['w'], w, delimiter=',')
+        alpha_star, rho_star = generate_alpha_rho_star(w)
+        np.savetxt(filename_dict['alpha_star'], alpha_star, delimiter=',')
+        np.savetxt(filename_dict['rho_star'], rho_star, delimiter=',')
+    return pos_bs, pos_user, w, alpha_star, rho_star
+
+
+def generate_w_unif(n_dataset, random_seed, n_node):
+    rng = np.random.default_rng(random_seed)
+    w = rng.uniform(0, 1, (n_dataset, n_node**2))
     return w
 
 
-def generate_dataset_input_easy(unif_ub):
-    w = np.zeros((N_DATASET, N_NODE**2))
-    for row in range(N_DATASET):
-        w[row, :] = np.random.uniform(0, unif_ub, N_NODE**2)
-        idx_taken = np.array([], dtype=int)
-        for i in range(N_NODE):
-            idx_picked = np.random.randint(0, N_NODE)
-            while idx_picked in idx_taken:
-                idx_picked = np.random.randint(0, N_NODE)
-            w[row, N_NODE*i + idx_picked] = 1
-            idx_taken = np.append(idx_taken, idx_picked)
-        if row==0:
-            print(f"Generating {N_DATASET} sets"
-                  " of input weights such as...")
-            print(reshape_to_square(w[row,:]))
+def generate_w_unif_easy(n_dataset, random_seed, n_node, unif_ub):
+    w = np.zeros((n_dataset, n_node**2))
+    for row in range(n_dataset):
+        rng = np.random.default_rng(random_seed + row)
+        w[row] = rng.uniform(0, unif_ub, n_node**2)
+        max_indices = np.linspace(0, n_node-1, n_node, dtype=int)
+        np.random.shuffle(max_indices)
+        for i, idx in zip(range(n_node), max_indices):
+            w[row, n_node*i + idx] = 1
     return w
 
 
-def generate_dataset_input_quantized():
-    for i in range(N_DATASET):
-        rng = np.random.default_rng(SEED_W+i)
-        w_instance = rng.integers(0, 10, (1, N_NODE**2))
-        if i==0:
-            w = w_instance/10
-        else:
-            w = np.append(w, w_instance/10, axis=0)
-    return w
+def generate_w_geographic(n_dataset, random_seed,
+                          n_node, map_size):
+    pos_bs = generate_positions(n_dataset,
+                                random_seed,
+                                n_node, map_size)
+    pos_user = generate_positions(n_dataset,
+                                  random_seed+n_dataset,
+                                  n_node, map_size)
+    datarate = np.zeros((n_dataset, n_node**2))
+    for n in range(n_dataset):
+        for i in range(n_node):
+            for j in range(n_node):
+                dist = np.linalg.norm(
+                    pos_bs[n, i] - pos_user[n, j], 2)
+                datarate[n, n_node*i+j] = 20*np.log2(1+dist**-3)
+        datarate[n] /= np.max(datarate[n])
+    return pos_bs, pos_user, datarate
 
 
-def generate_dataset_output(w):
+def generate_positions(n_dataset, random_seed, n_node, map_size):
+    rng = np.random.default_rng(random_seed)
+    pos = rng.uniform(0, map_size, (n_dataset, n_node, 2))
+    return pos
+
+
+def generate_alpha_rho_star(w):
     alpha_star = np.zeros(np.shape(w))
     rho_star = np.zeros(np.shape(w))
-    for i in range(N_DATASET):
-        w_now = reshape_to_square(w[i])
-        alpha_tmp = np.zeros(np.shape(w_now))
-        rho_tmp = np.zeros(np.shape(w_now))
+    n_dataset = np.size(w, axis=0)
+    for i in range(n_dataset):
+        w_tmp = reshape_to_square(w[i])
+        alpha_tmp = np.zeros(np.shape(w_tmp))
+        rho_tmp = np.zeros(np.shape(w_tmp))
         for j in range(N_ITER):
             alpha_tmp = update_alpha(
-                alpha_tmp, rho_tmp, w_now, bLogSumExp=False)
+                alpha_tmp, rho_tmp, w_tmp, bLogSumExp=False)
             rho_tmp = update_rho(
-                alpha_tmp, rho_tmp, w_now, bLogSumExp=False)
+                alpha_tmp, rho_tmp, w_tmp, bLogSumExp=False)
         alpha_star[i] = reshape_to_flat(alpha_tmp)
         rho_star[i] = reshape_to_flat(rho_tmp)
     return alpha_star, rho_star
-
-
-def read_dataset():
-    w = np.loadtxt(filenames['w'], dtype=float, delimiter=',')
-    alpha_star = np.loadtxt(filenames['alpha_star'], dtype=float, delimiter=',')
-    rho_star = np.loadtxt(filenames['rho_star'], dtype=float, delimiter=',')
-    return w, alpha_star, rho_star
 
 
 def reshape_to_square(flat_array):
@@ -205,6 +211,7 @@ def decompose_dataset(arr, mode):
             rho = reshape_to_square(rho)
         return alpha, rho
     else:
+        print("Mode error in decompose_dataset().")
         pass
 
 
@@ -306,7 +313,7 @@ def get_D_mp(n_samples, alpha_rho_star):
     D_mp_validity = np.zeros(n_samples, dtype=bool)
     for i in range(n_samples):
         alpha_star, rho_star = decompose_dataset(alpha_rho_star[i], 'output')
-        D_pred = get_pairing_matrix(alpha_star, rho_star)
+        D_pred = get_pairing_matrix_argmax(alpha_star, rho_star, N_NODE)
         D_mp[i] = reshape_to_flat(D_pred)
         D_mp_validity[i] = check_validity(D_pred)
     return D_mp, D_mp_validity
@@ -320,7 +327,7 @@ def get_D_nn(n_samples, w, model):
         alpha_rho = model(w_sample).numpy()[0]
         alpha_sample, rho_sample = decompose_dataset(
             alpha_rho, 'output')
-        D_pred = get_pairing_matrix(alpha_sample, rho_sample)
+        D_pred = get_pairing_matrix_argmax(alpha_sample, rho_sample, N_NODE)
         D_nn[i] = reshape_to_flat(D_pred)
         D_nn_validity[i] = check_validity(D_pred)
     return D_nn, D_nn_validity

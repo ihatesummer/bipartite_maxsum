@@ -3,7 +3,7 @@ import numpy as np
 import time
 import os as os
 from sklearn.model_selection import train_test_split
-from maxsum import check_validity, get_pairing_matrix
+from maxsum import check_validity, get_pairing_matrix_argmax
 from maxsum_condensed import (update_alpha, update_rho,
                               show_match)
 
@@ -278,7 +278,10 @@ def get_D_ann(n_test_samples, x_test, model):
             w_alpha_rho = construct_nn_input(w, alpha_rho)
         alpha_converged, rho_converged = decompose_dataset(
             alpha_rho, 'output')        
-        D_real = get_pairing_matrix(alpha_converged, rho_converged)
+        D_real = get_pairing_matrix_argmax(
+            alpha_converged,
+            rho_converged,
+            N_NODE)
         is_valid = check_validity(D_real)
         D_ann[i] = reshape_to_flat(D_real)
         D_ann_validity[i] = is_valid
@@ -290,7 +293,10 @@ def get_D_msgPassing(n_test_samples, y_test_star):
     D_msgPassing_validity = np.zeros((n_test_samples, 1), dtype=bool)
     for i in range(n_test_samples):
         alpha_star, rho_star = decompose_dataset(y_test_star[i], 'output')
-        D_real = get_pairing_matrix(alpha_star, rho_star)
+        D_real = get_pairing_matrix_argmax(
+            alpha_star,
+            rho_star,
+            N_NODE)
         is_valid = check_validity(D_real)
         D_msgPassing[i] = reshape_to_flat(D_real)
         D_msgPassing_validity[i] = is_valid

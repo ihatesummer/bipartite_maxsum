@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from maxsum import reshape_to_flat, reshape_to_square, check_validity, show_match, get_pairing_matrix
+from maxsum import reshape_to_flat, reshape_to_square, check_validity, show_match, get_pairing_matrix_argmax
 
 INF = 10**60  # infinity
 DAMP = 0  # between 0 and 1 (0 for fastest change)
@@ -30,6 +30,8 @@ def main():
         rho_history[:, i] = reshape_to_flat(rho, N_NODE)
         if i>0:
             print(f"\n{i}th iteration:")
+            print(f"alpha:\n{alpha}")
+            print(f"rho:\n{rho}")
             print(f"alpha diff:\n{reshape_to_square(alpha_history[:,i]-alpha_history[:,i-1], N_NODE)}")
             print(f"rho diff:\n{reshape_to_square(rho_history[:,i]-rho_history[:,i-1], N_NODE)}")
             print(f"alpha + rho: \n{alpha+rho}")
@@ -37,7 +39,7 @@ def main():
     show_msg_changes_2(alpha_history, rho_history)
 
     print(f"alpha + rho: \n{alpha+rho}")
-    D = get_pairing_matrix(alpha, rho)
+    D = get_pairing_matrix_argmax(alpha, rho, N_NODE)
     is_valid = check_validity(D)
     toc = time.time()
     print(f"matching time: {(toc - tic)*1000}ms")

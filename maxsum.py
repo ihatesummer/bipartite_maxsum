@@ -118,17 +118,19 @@ def update_eta(eta, beta):
     return new*(1-DAMP) + old*(DAMP)
 
 
-def get_pairing_matrix(alpha, rho):
-    D = rho + alpha
-    # print(f"final alpha:\n{alpha}")
-    # print(f"final rho:\n{rho}")
-    # print(f"alpha+rho:\n{D}")
-    for row in range(N_NODE):
-        idx_max = np.argmax(D[row, :])
-        D[row, :] = 0
-        D[row, idx_max] = 1
-    # print(f"D:\n{D}")
-    return D
+def get_pairing_matrix_argmax(alpha, rho, n_node):
+    pair_matrix = rho + alpha
+    for row in range(n_node):
+        idx_max = np.argmax(pair_matrix[row])
+        pair_matrix[row, :] = 0
+        pair_matrix[row, idx_max] = 1
+    return pair_matrix.astype(int)
+
+
+def get_pairing_matrix_sign(alpha, rho):
+    sum = rho + alpha
+    pair_matrix = (sum>0).astype(int)
+    return pair_matrix
 
 
 def show_msg_changes_4(alpha_history,
@@ -163,7 +165,7 @@ def show_msg_changes_4(alpha_history,
 
 def check_validity(D):
     rowsum = np.sum(D, axis=0)
-    colsum = np.sum(D, axis=0)
+    colsum = np.sum(D, axis=1)
     if np.all(rowsum==1) and np.all(colsum==1):
         return True
     else:

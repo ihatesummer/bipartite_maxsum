@@ -88,15 +88,34 @@ def main():
         loss_history.append(loss)
         solved_history.append(solved)
 
+
     _, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,6))
     axes[0].set_title('reward')
     axes[1].set_title('loss')
     epi = np.linspace(0, len(reward_history)-1, len(reward_history))
+
+    reward_history_solved = np.asfarray(reward_history)
+    reward_history_solved[[not solved for solved in solved_history]] = np.nan
+    reward_history_unsolved = np.asfarray(reward_history)
+    reward_history_unsolved[solved_history] = np.nan
+    axes[0].plot(epi, reward_history_solved,
+                 "o", color='green', markersize=2)
+    axes[0].plot(epi, reward_history_unsolved,
+                 "o", color='red', markersize=2)
     axes[0].plot(epi, reward_history,
-                 "-", color='red', alpha=0.2)
+                 "-", color='black', alpha=0.2)
     axes[0].set_xlim(xmin=0)
+
+    loss_history_solved = np.asfarray(loss_history)
+    loss_history_solved[[not solved for solved in solved_history]] = np.nan
+    loss_history_unsolved = np.asfarray(loss_history)
+    loss_history_unsolved[solved_history] = np.nan
+    axes[1].plot(epi, loss_history_solved,
+                 "o", color='green', markersize=2)
+    axes[1].plot(epi, loss_history_unsolved,
+                 "o", color='red', markersize=2)
     axes[1].plot(epi, loss_history,
-                 "-", color='green', alpha=0.2)
+                 "-", color='black', alpha=0.2)
     axes[1].set_xlim(xmin=0)
     plt.show()
 
