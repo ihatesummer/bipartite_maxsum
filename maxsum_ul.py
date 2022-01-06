@@ -153,7 +153,7 @@ def generate_w_geographic(n_dataset, random_seed,
             for j in range(n_node):
                 dist = np.linalg.norm(
                     pos_bs[n, i] - pos_user[n, j], 2)
-                datarate[n, n_node*i+j] = 20*np.log2(1+dist**-3)
+                datarate[n, n_node*i+j] = np.log2(1+dist**-3)
         datarate[n] /= np.max(datarate[n])
     return pos_bs, pos_user, datarate
 

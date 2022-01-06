@@ -1,3 +1,4 @@
+from re import A
 from maxsum import check_validity, get_pairing_matrix_argmax, get_pairing_matrix_sign, reshape_to_flat, reshape_to_square
 from maxsum_ul import get_datasets, forward_pass, decompose_dataset, FILENAMES, N_DATASET, N_NODE, SEED_W
 from torch.distributions import Normal
@@ -9,15 +10,15 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=2)
 GAMMA = 1.0
-N_EPISODE = 10000
-MAX_TIMESTEP = 10
+N_EPISODE = 20000
+MAX_TIMESTEP = 5
 FILENAMES["nn_weight"] = "weights_rl.h5"
 
 
 def main():
     pos_bs, pos_user, w, alpha_star, rho_star = get_datasets(
-        FILENAMES, N_DATASET, SEED_W, N_NODE, "unif_easy")
-    dataset_idx = 0
+        FILENAMES, N_DATASET, SEED_W, N_NODE, "geographic")
+    dataset_idx = 4
     D_mp = get_pairing_matrix_argmax(
         reshape_to_square(alpha_star[dataset_idx], N_NODE),
         reshape_to_square(rho_star[dataset_idx], N_NODE), N_NODE)
