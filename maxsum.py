@@ -47,10 +47,10 @@ def main():
         # print(f"rho:\n{rho}")
         # print(f"beta:\n{beta}")
         D_now = eta + alpha + w
-        alpha_history[:, i] = reshape_to_flat(alpha)
-        eta_history[:, i] = reshape_to_flat(eta)
-        rho_history[:, i] = reshape_to_flat(rho)
-        beta_history[:, i] = reshape_to_flat(beta)
+        alpha_history[:, i] = reshape_to_flat(alpha, N_NODE)
+        eta_history[:, i] = reshape_to_flat(eta, N_NODE)
+        rho_history[:, i] = reshape_to_flat(rho, N_NODE)
+        beta_history[:, i] = reshape_to_flat(beta, N_NODE)
     
     show_msg_changes_4(alpha_history, eta_history,
                      rho_history, beta_history)
