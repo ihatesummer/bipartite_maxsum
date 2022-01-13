@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import itertools
+import os
 
 np.set_printoptions(precision=3)
 np.set_printoptions(suppress=True)
@@ -15,13 +16,13 @@ N_TRAIN = 9000
 N_TEST = 1
 N_EPISODE = 5000
 MAX_TIMESTEP = 10
-FILENAMES["nn_weight_alpha"] = "weights_rl_alpha.h5"
-FILENAMES["nn_weight_rho"] = "weights_rl_rho.h5"
+FILENAMES["model_alpha"] = "model_alpha.h5"
+FILENAMES["model_rho"] = "model_rho.h5"
 
 
 def main():
-    print("CUDA available:", torch.cuda.is_available(),
-          torch.cuda.get_device_name(torch.cuda.current_device()))
+    print("CUDA available:", torch.cuda.is_available())
+    print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
     pos_bs, pos_user, w, alpha_star, rho_star = get_datasets(
         FILENAMES, N_DATASET, SEED_W, N_NODE, "geographic")
     dim_in = 2*N_NODE**2
@@ -31,22 +32,36 @@ def main():
     pi_rho = Pi(dim_in, dim_out)
     optim_alpha = optim.Adam(pi_alpha.parameters(), lr=learning_rate)
     optim_rho = optim.Adam(pi_rho.parameters(), lr=learning_rate)
+    # print_state_dicts(pi_alpha, pi_rho, optim_alpha, optim_rho)
+    loss_fn = nn.L1Loss(reduction='sum')
 
-    loss_fn = nn.MSELoss(reduction='sum')
-    for data_no in range(N_TRAIN):
+    if os.path.exists(FILENAMES["model_alpha"] and FILENAMES["model_rho"]):
+        print("Loading train checkpoint...")
+        ckpt_alpha = torch.load(FILENAMES["model_alpha"])
+        ckpt_rho = torch.load(FILENAMES["model_rho"])
+        pi_alpha.model.load_state_dict(ckpt_alpha['model_state_dict'])
+        pi_rho.model.load_state_dict(ckpt_rho['model_state_dict'])
+        optim_alpha.load_state_dict(ckpt_alpha['optimizer_state_dict'])
+        optim_rho.load_state_dict(ckpt_rho['optimizer_state_dict'])
+        data_no_ckpt = ckpt_rho['data_no']
+        print(f"Checkpoint up to data {data_no_ckpt} loaded.")
+        dataset_start_idx = data_no_ckpt + 1
+    else:
+        dataset_start_idx = 0
+
+    for data_no in range(dataset_start_idx, N_TRAIN):
         print(f"Train set {data_no} weights:\n{reshape_to_square(w[data_no], N_NODE)}")
         plot_positions(pos_bs[data_no], pos_user[data_no], data_no)
         D_mp = get_pairing_matrix_argmax(reshape_to_square(alpha_star[data_no], N_NODE),
                                          reshape_to_square(rho_star[data_no], N_NODE),
                                          N_NODE)
         print(f"D(mp):\n{D_mp}")
+
         init_alpha = torch.zeros((N_NODE**2))
         init_rho = torch.zeros((N_NODE**2))
         w_tensor = torch.from_numpy(w[data_no].astype(np.float32))
-
         # init_alpha, init_rho = cheat_start(init_alpha, init_rho,
         #                                     w[data_no], n_cheat_step=10)
-
         reward_history = np.zeros(N_EPISODE)
         solved_history = np.zeros(N_EPISODE, dtype=bool)
         for epi_no in range(N_EPISODE):
@@ -84,7 +99,6 @@ def main():
                 # print(f"New alpha: \n{reshape_to_square(alpha.detach().numpy(), N_NODE)}")
                 # print(f"New rho: \n{reshape_to_square(rho.detach().numpy(), N_NODE)}")
 
-
                 # n_up_alpha = 0
                 # n_down_alpha = 0
                 # n_up_rho = 0
@@ -114,6 +128,7 @@ def main():
 
             loss_sum_alpha = train(pi_alpha, optim_alpha, True)
             loss_sum_rho = train(pi_rho, optim_rho, False)
+            loss = loss_sum_alpha+loss_sum_rho
             
             D_rl = get_pairing_matrix_argmax(
                 reshape_to_square(alpha.detach().numpy(), N_NODE),
@@ -126,7 +141,7 @@ def main():
             if epi_no % 1000 == 0:
                 print(f"(Dataset{data_no} episode{epi_no}) "
                     f"total_reward: {total_reward_alpha+total_reward_rho:.2f}, "
-                    f"loss: {loss_sum_alpha+loss_sum_rho:.2f}, "
+                    f"loss: {loss:.2f}, "
                     f"D_rl==D_mp: {(D_rl==D_mp).all()}")
                 # compare_with_target(alpha_hist, alpha_target_hist, rho_hist, rho_target_hist,
                 #                     data_no, epi_no)
@@ -138,8 +153,14 @@ def main():
             pi_rho.onpolicy_reset()
         if data_no % 1000 == 0:
             plot_reward(reward_history, solved_history, data_no)
-    torch.save(pi_alpha.model.state_dict(), FILENAMES["nn_weight_alpha"])
-    torch.save(pi_rho.model.state_dict(), FILENAMES["nn_weight_rho"])
+        torch.save({'data_no': data_no,
+                    'model_state_dict': pi_alpha.model.state_dict(),
+                    'optimizer_state_dict': optim_alpha.state_dict(),
+                    'loss': loss_sum_alpha}, FILENAMES["model_alpha"])
+        torch.save({'data_no': data_no,
+                    'model_state_dict': pi_rho.model.state_dict(),
+                    'optimizer_state_dict': optim_rho.state_dict(),
+                    'loss': loss_sum_rho}, FILENAMES["model_rho"])
 
 
 class Pi(nn.Module):
@@ -165,6 +186,21 @@ class Pi(nn.Module):
     def act(self, state):
         action = self.model(state)
         return action
+
+
+def print_state_dicts(pi_alpha, pi_rho, optim_alpha, optim_rho):
+    print("\nPi(alpha)'s state_dict:")
+    for param_tensor in pi_alpha.state_dict():
+        print(param_tensor, "\t", pi_alpha.state_dict()[param_tensor].size())
+    print("\nPi(rho)'s state_dict:")
+    for param_tensor in pi_rho.state_dict():
+        print(param_tensor, "\t", pi_rho.state_dict()[param_tensor].size())
+    print("\nOptimizer(alpha)'s state_dict:")
+    for var_name in optim_alpha.state_dict():
+        print(var_name, "\t", optim_alpha.state_dict()[var_name])
+    print("\nOptimizer(rho)'s state_dict:")
+    for var_name in optim_rho.state_dict():
+        print(var_name, "\t", optim_rho.state_dict()[var_name])
 
 
 def cheat_start(init_alpha, init_rho, w, n_cheat_step):
