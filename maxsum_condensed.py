@@ -9,7 +9,7 @@ import itertools
 INF = 10**60  # infinity
 DAMP = 0  # between 0 and 1 (0 for fastest change)
 N_NODE = 5  # number of nodes per group
-N_ITER = 20
+N_ITER = 100
 bLogSumExp = False
 np.set_printoptions(precision=3)
 
@@ -18,7 +18,7 @@ def main():
     rng = np.random.default_rng(1)
     w = rng.uniform(0, 1, (N_NODE, N_NODE))
     ds = np.loadtxt("5-by-5 - w.csv", delimiter=',')
-    w = reshape_to_square(ds[0], N_NODE)
+    w = reshape_to_square(ds[1], N_NODE)
     print(f"weights:\n{w}")
     alpha = np.zeros((N_NODE, N_NODE))
     rho = np.zeros((N_NODE, N_NODE))
@@ -119,8 +119,8 @@ def show_msg_changes_2(alpha_history,
 
 def show_mp_error(alpha_diff_history, rho_diff_history):
     _, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,6))
-    axes[0].set_title('alpha error')
-    axes[1].set_title('rho error')
+    axes[0].set_title('f(rho, w) errors')
+    axes[1].set_title('g(alpha, w) errors')
     x = np.linspace(0, N_ITER-2, N_ITER-1)
     for node_ij in range(N_NODE**2):
         axes[0].semilogy(x, alpha_diff_history[node_ij, :],
