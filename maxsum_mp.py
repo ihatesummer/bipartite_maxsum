@@ -1,33 +1,44 @@
 # %%
+from re import I
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import itertools
 
 INF = 10**60
-DAMP = 0  # between 0 and 1 (0 for fastest change)
+DAMP = 0.5  # between 0 and 1 (0 for fastest change)
 bLogSumExp = False
 np.set_printoptions(precision=3)
-
+np.set_printoptions(suppress=True)
+matplotlib.use('Agg')
 
 def main():
-    idx = 1
+    idx = np.linspace(64794, 100000, 100000-64794+1, dtype=int)
     n_node = 5
-    n_iter = 10
+    n_iter = 15
     w_ds = np.load(f"{n_node}x{n_node}_w.npy")
-    alpha_hist, rho_hist = iterate_maxsum_mp(w_ds[idx], n_iter, n_node)
+    pos_bs = np.load(f"{n_node}x{n_node}_bs_pos.npy")
+    pos_user = np.load(f"{n_node}x{n_node}_user_pos.npy")
 
-    alpha, rho = (reshape_to_square(alpha_hist[-1], n_node),
-                  reshape_to_square(rho_hist[-1], n_node))
+    # print(f"Data{idx} weights:\n"
+    #       f"{reshape_to_square(w_ds[idx], n_node)}")
+    for i in idx:
+        print(i)
+        alpha_hist, rho_hist = iterate_maxsum_mp(w_ds[i], n_iter, n_node)
 
-    D_mp = get_pairing_matrix_argmax(alpha, rho, n_node)
-    is_valid = check_pairing_validity(D_mp)
-    if is_valid:
-        print(f"Pairing success:\n{D_mp}")
-    else:
-        print("Pairing failed.")
+        alpha, rho = (reshape_to_square(alpha_hist[-1], n_node),
+                    reshape_to_square(rho_hist[-1], n_node))
 
-    show_mp_traj(alpha_hist, rho_hist, idx, n_node)
-    show_mp_error(alpha_hist, rho_hist, idx, n_node)
+        D_mp = get_pairing_matrix_argmax(alpha, rho, n_node)
+        is_valid = check_pairing_validity(D_mp)
+        # if is_valid:
+        #     print(f"Pairing success:\n{D_mp}")
+        # else:
+        #     print("Pairing failed.")
+
+        show_mp_traj(alpha_hist, rho_hist, i, n_node)
+        show_mp_error(alpha_hist, rho_hist, i, n_node)
+        plot_positions(pos_bs[i], pos_user[i], i, n_node, map_size=1)
 
 
 def iterate_maxsum_mp(w, n_iter, n_node):
@@ -123,6 +134,22 @@ def check_pairing_validity(D):
         return False
 
 
+def plot_positions(bs_i, user_i, idx, n_node, map_size):
+    plt.title("BS and user positions")
+    plt.xlabel("x [m]")
+    plt.ylabel("y [m]")
+    plt.xlim(0, map_size)
+    plt.ylim(0, map_size)
+    for i in range(n_node):
+        plt.plot(bs_i[i, 0], bs_i[i, 1], 'b',
+                 marker=f"${i+1}$", markersize=12)
+        plt.plot(user_i[i, 0], user_i[i, 1], 'r',
+                 marker=f"${i+1}$", markersize=12)
+    plt.savefig(f"training/data{idx}_pos.png")
+    plt.clf()
+    plt.close("all")
+
+
 def show_mp_traj(alpha_hist, rho_hist, idx, n_node):
     _, axes = plt.subplots(nrows=n_node, ncols=2,
                            figsize=(10, 12),
@@ -142,6 +169,7 @@ def show_mp_traj(alpha_hist, rho_hist, idx, n_node):
         axes[i, 0].set_xlim(xmin=0, xmax=n_iter-1)
         axes[i, 1].set_xlim(xmin=0, xmax=n_iter-1)
     plt.savefig(f"training/data{idx}_mp_traj.png")
+    plt.close('all')
 
 
 def show_mp_error(alpha_hist, rho_hist, idx, n_node):
@@ -164,6 +192,7 @@ def show_mp_error(alpha_hist, rho_hist, idx, n_node):
                          "-*", linewidth=1, color='green', alpha=0.5)
         axes[1].set_xlim(xmin=0, xmax=t_max-1)
     plt.savefig(f"training/data{idx}_mp_err.png")
+    plt.close('all')
 
 
 if __name__=="__main__":
