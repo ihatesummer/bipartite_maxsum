@@ -16,14 +16,17 @@ matplotlib.use('Agg')
 GAMMA = 1.0
 SEED_W = 0
 N_NODE = 5
-N_DATASET = 100000
-N_TRAIN = 90000
-N_REPEAT = 50
+N_DATASET = 1000000
+N_TRAIN = 900000
+N_REPEAT = 10
 MAX_TIMESTEP = 15
 FILENAMES = {
     "w": f"{N_NODE}x{N_NODE}_w.npy",
     "pos_bs": f"{N_NODE}x{N_NODE}_bs_pos.npy",
     "pos_user": f"{N_NODE}x{N_NODE}_user_pos.npy",
+    "D_mp": f"{N_NODE}x{N_NODE}_mp_d.npy",
+    "alpha_mp": f"{N_NODE}x{N_NODE}_mp_alpha.npy",
+    "rho_mp": f"{N_NODE}x{N_NODE}_mp_rho.npy",
     "model_alpha": "ckpt_alpha.h5",
     "model_rho": "ckpt_rho.h5",
     "general_info": "ckpt_general.h5"
@@ -33,7 +36,13 @@ FILENAMES = {
 def main():
     check_cuda_device()
     _, _, w_ds = get_datasets()
-    D_mp = get_reference_mp(w_ds, n_iter=MAX_TIMESTEP)
+    if os.path.exists(FILENAMES["D_mp"]):
+        D_mp = np.load(FILENAMES["D_mp"])
+    else:
+        D_mp, alpha_mp, rho_mp = get_reference_mp(w_ds, n_iter=MAX_TIMESTEP)
+        np.save(FILENAMES["D_mp"], D_mp)
+        np.save(FILENAMES["alpha_mp"], alpha_mp)
+        np.save(FILENAMES["rho_mp"], rho_mp)
     D_hungarian= get_reference_hungarian(w_ds)
 
     learning_rate = 1e-5
@@ -221,9 +230,9 @@ def validate_pi(pi_alpha, pi_rho, w, idx, repeat_no):
     pi_alpha.train()
     pi_rho.train()
 
-    show_rl_traj(alpha_hist, alpha_target_hist,
-                 rho_hist, rho_target_hist,
-                 idx, f"{repeat_no}_valid")
+    # show_rl_traj(alpha_hist, alpha_target_hist,
+    #              rho_hist, rho_target_hist,
+    #              idx, f"{repeat_no}_valid")
     alpha_rl = reshape_to_square(alpha.detach().numpy(), N_NODE)
     rho_rl = reshape_to_square(rho.detach().numpy(), N_NODE)
     D_rl = get_pairing_matrix_argmax(alpha_rl, rho_rl, N_NODE)
@@ -245,13 +254,16 @@ def get_datasets():
 
 def get_reference_mp(w_ds, n_iter):
     D_mp = np.zeros((N_DATASET, N_NODE, N_NODE), dtype=int)
+    alpha_mp = np.zeros((N_DATASET, N_NODE, N_NODE))
+    rho_mp = np.zeros((N_DATASET, N_NODE, N_NODE))
     for i in range(N_DATASET):
         alpha_hist, rho_hist = iterate_maxsum_mp(w_ds[i], n_iter, N_NODE)
         alpha, rho = (reshape_to_square(alpha_hist[-1], N_NODE),
                       reshape_to_square(rho_hist[-1], N_NODE))
+        alpha_mp[i], rho_mp[i] = alpha, rho
         D_mp[i] = get_pairing_matrix_argmax(alpha, rho, N_NODE)
     
-    return D_mp
+    return D_mp, alpha_mp, rho_mp
 
 
 def get_reference_hungarian(w_ds):

@@ -6,7 +6,7 @@ import torch
 import os
 import matplotlib.pyplot as plt
 
-N_TEST = 10000
+N_TEST = 100000
 np.set_printoptions(precision=3)
 np.set_printoptions(suppress=True)
 plt.style.use('seaborn-deep')
@@ -15,9 +15,9 @@ plt.style.use('seaborn-deep')
 def main():
     check_cuda_device()
     _, _, w_ds = get_datasets()
-    # D_mp = get_reference_mp(w_ds, n_iter=MAX_TIMESTEP)
-    # np.save("d_mp_test.npy", D_mp)
-    D_mp = np.load("d_mp_test.npy")
+    D_mp = np.load(FILENAMES["D_mp"])
+    alpha_mp = np.load(FILENAMES["alpha_mp"])
+    rho_mp = np.load(FILENAMES["rho_mp"])
     D_hungarian = get_reference_hungarian(w_ds)
 
     pi_alpha, pi_rho = (Pi(2*N_NODE**2, N_NODE**2),
@@ -43,18 +43,19 @@ def main():
                 "rl": np.zeros(N_TEST),
                 "hungarian": np.zeros(N_TEST)}
     for i in range(N_TEST):
-        # if i != 343:
+        # if i != 1237:
         #     continue
         data_no = i + N_TRAIN
-        # print(data_no)
         w = reshape_to_square(w_ds[data_no], N_NODE)
 
         sumrates["hungarian"][i] = np.sum(D_hungarian[data_no]*w)
 
-        if check_pairing_validity(D_mp[data_no]):
-            sumrates["mp"][i] = np.sum(D_mp[data_no]*w)
-        else:
-            sumrates["mp"][i] = 0
+        if not check_pairing_validity(D_mp[data_no]):
+            # print(data_no)
+            # print(alpha_mp[data_no]+rho_mp[data_no])
+            # print(D_mp[data_no])
+            D_mp[data_no] = greedy_CA(alpha_mp[data_no]+rho_mp[data_no], D_mp[data_no])
+        sumrates["mp"][i] = np.sum(D_mp[data_no]*w)
         
         # print(D_hungarian[data_no])
         alpha_rl, rho_rl = test_pi(pi_alpha, pi_rho, w_ds[data_no])
@@ -65,19 +66,22 @@ def main():
             D_rl = greedy_CA(alpha_rl+rho_rl, D_rl)
             # print("after greedy CA:")
             # print(D_rl)
+        sumrates["rl"][i] = np.sum(D_rl*w)
         ham_dist = get_hamming_distance(D_rl, D_mp[data_no])
         # print(ham_dist)
         ham_dist_list[i] = ham_dist
-        sumrates["rl"][i] = np.sum(D_rl*w)
-    # print("Test set evaluation:")
     unique, counts = np.unique(ham_dist_list, return_counts=True)
-    # print(dict(zip(unique, counts)))
+    print("Test set evaluation:")
+    print(dict(zip(unique, counts)))
+    print(f"Avg sum rate (Hungarian): {np.mean(sumrates['hungarian'])}")
+    print(f"Avg sum rate (MP): {np.mean(sumrates['mp'])}")
+    print(f"Avg sum rate (RL): {np.mean(sumrates['rl'])}")
 
     # plt.plot(sumrates["hungarian"][:1000], label="Hungarian", color='r', alpha=0.5)
     # plt.plot(sumrates["mp"][:1000], label="Ising", color='b', alpha=0.5)
     # plt.plot(sumrates["rl"][:1000], label="RL", color='g', alpha=0.5)
     bins = np.linspace(0, 5, 26)
-    plt.hist([sumrates["hungarian"], sumrates["hungarian"], sumrates["rl"]],
+    plt.hist([sumrates["hungarian"], sumrates["mp"], sumrates["rl"]],
              bins, label=["Hungarian", "Ising", "RL"])
     plt.legend()
     plt.xlim(0, 5)
