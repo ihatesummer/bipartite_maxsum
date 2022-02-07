@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import itertools
+import time
 
 INF = 10**60
 DAMP = 0.5  # between 0 and 1 (0 for fastest change)
@@ -13,8 +14,8 @@ np.set_printoptions(suppress=True)
 matplotlib.use('Agg')
 
 def main():
-    idx = np.linspace(64794, 100000, 100000-64794+1, dtype=int)
-    n_node = 5
+    idx = np.linspace(0, 10, 11, dtype=int)
+    n_node = 10
     n_iter = 15
     w_ds = np.load(f"{n_node}x{n_node}_w.npy")
     pos_bs = np.load(f"{n_node}x{n_node}_bs_pos.npy")
@@ -22,23 +23,26 @@ def main():
 
     # print(f"Data{idx} weights:\n"
     #       f"{reshape_to_square(w_ds[idx], n_node)}")
+    times = []
     for i in idx:
-        print(i)
+        tic = time.time()
         alpha_hist, rho_hist = iterate_maxsum_mp(w_ds[i], n_iter, n_node)
 
         alpha, rho = (reshape_to_square(alpha_hist[-1], n_node),
                     reshape_to_square(rho_hist[-1], n_node))
 
         D_mp = get_pairing_matrix_argmax(alpha, rho, n_node)
+        times.append(time.time()-tic)
         is_valid = check_pairing_validity(D_mp)
-        # if is_valid:
-        #     print(f"Pairing success:\n{D_mp}")
-        # else:
-        #     print("Pairing failed.")
+        if is_valid:
+            print(f"Pairing success:\n{D_mp}")
+        else:
+            print("Pairing failed.")
 
         show_mp_traj(alpha_hist, rho_hist, i, n_node)
         show_mp_error(alpha_hist, rho_hist, i, n_node)
         plot_positions(pos_bs[i], pos_user[i], i, n_node, map_size=1)
+    print("Avg time:", np.mean(times))
 
 
 def iterate_maxsum_mp(w, n_iter, n_node):

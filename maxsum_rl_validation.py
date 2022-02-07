@@ -4,9 +4,10 @@ from maxsum_rl import *
 import numpy as np
 import torch
 import os
+import time
 import matplotlib.pyplot as plt
 
-N_TEST = 100000
+N_TEST = 10
 np.set_printoptions(precision=3)
 np.set_printoptions(suppress=True)
 plt.style.use('seaborn-deep')
@@ -42,6 +43,7 @@ def main():
     sumrates = {"mp": np.zeros(N_TEST),
                 "rl": np.zeros(N_TEST),
                 "hungarian": np.zeros(N_TEST)}
+    rl_times = np.zeros(N_TEST)
     for i in range(N_TEST):
         # if i != 1237:
         #     continue
@@ -51,44 +53,37 @@ def main():
         sumrates["hungarian"][i] = np.sum(D_hungarian[data_no]*w)
 
         if not check_pairing_validity(D_mp[data_no]):
-            # print(data_no)
-            # print(alpha_mp[data_no]+rho_mp[data_no])
-            # print(D_mp[data_no])
             D_mp[data_no] = greedy_CA(alpha_mp[data_no]+rho_mp[data_no], D_mp[data_no])
+            # D_mp[data_no] = exclude_collision(D_mp[data_no])
         sumrates["mp"][i] = np.sum(D_mp[data_no]*w)
-        
-        # print(D_hungarian[data_no])
+
+        tic_rl = time.time()
         alpha_rl, rho_rl = test_pi(pi_alpha, pi_rho, w_ds[data_no])
-        # print(alpha_rl + rho_rl)
         D_rl = get_pairing_matrix_argmax(alpha_rl, rho_rl, N_NODE)
-        # print(D_rl)
+        rl_times[i] = time.time() - tic_rl
         if not check_pairing_validity(D_rl):
             D_rl = greedy_CA(alpha_rl+rho_rl, D_rl)
-            # print("after greedy CA:")
-            # print(D_rl)
+            # D_rl = exclude_collision(D_rl)
         sumrates["rl"][i] = np.sum(D_rl*w)
         ham_dist = get_hamming_distance(D_rl, D_mp[data_no])
-        # print(ham_dist)
         ham_dist_list[i] = ham_dist
     unique, counts = np.unique(ham_dist_list, return_counts=True)
-    print("Test set evaluation:")
+    print("MP-RL hamming distance:")
     print(dict(zip(unique, counts)))
     print(f"Avg sum rate (Hungarian): {np.mean(sumrates['hungarian'])}")
     print(f"Avg sum rate (MP): {np.mean(sumrates['mp'])}")
     print(f"Avg sum rate (RL): {np.mean(sumrates['rl'])}")
+    print(f"Avg time (RL): {np.mean(rl_times)}")
 
-    # plt.plot(sumrates["hungarian"][:1000], label="Hungarian", color='r', alpha=0.5)
-    # plt.plot(sumrates["mp"][:1000], label="Ising", color='b', alpha=0.5)
-    # plt.plot(sumrates["rl"][:1000], label="RL", color='g', alpha=0.5)
-    bins = np.linspace(0, 5, 26)
-    plt.hist([sumrates["hungarian"], sumrates["mp"], sumrates["rl"]],
-             bins, label=["Hungarian", "Ising", "RL"])
-    plt.legend()
-    plt.xlim(0, 5)
-    plt.title("Test set evaluations")
-    plt.xlabel("sum-rate [bps]")
-    plt.ylabel("number of samples")
-    plt.savefig("tmp.png")
+    # bins = np.linspace(0, 5, 26)
+    # plt.hist([sumrates["hungarian"], sumrates["mp"], sumrates["rl"]],
+    #          bins, label=["Hungarian", "Ising", "RL"])
+    # plt.legend()
+    # plt.xlim(0, 5)
+    # plt.title("Test set evaluations")
+    # plt.xlabel("sum-rate [bps]")
+    # plt.ylabel("number of samples")
+    # plt.savefig("tmp.png")
 
 
 def test_pi(pi_alpha, pi_rho, w):
@@ -109,7 +104,8 @@ def test_pi(pi_alpha, pi_rho, w):
 
 def greedy_CA(D_float, D):
     idx_taken = []
-    for row in range(N_NODE):
+    random_order = np.random.permutation(N_NODE)
+    for row in random_order:
         selection = np.argmax(D[row])
         if selection in idx_taken:
             taken_by = np.reshape(
@@ -129,6 +125,18 @@ def greedy_CA(D_float, D):
         else:
             idx_taken.append(selection)
     return D
+
+
+def exclude_collision(D):
+    idx_taken = []
+    random_order = np.random.permutation(N_NODE)
+    for row in random_order:
+        selection = np.argmax(D[row])
+        if selection in idx_taken:
+            D[row, selection] = 0
+        idx_taken.append(selection)
+    return D
+
 
 
 if __name__=="__main__":
