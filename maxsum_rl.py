@@ -15,10 +15,10 @@ np.set_printoptions(suppress=True)
 matplotlib.use('Agg')
 GAMMA = 1.0
 SEED_W = 0
-N_NODE = 10
-N_DATASET = 100000
-N_TRAIN = 90000
-N_REPEAT = 1
+N_NODE = 5
+N_DATASET = 1000000
+N_TRAIN = 900000
+N_REPEAT = 10
 MAX_TIMESTEP = 15
 FILENAMES = {
     "w": f"{N_NODE}x{N_NODE}_w.npy",

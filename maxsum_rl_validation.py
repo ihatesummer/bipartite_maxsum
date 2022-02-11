@@ -7,7 +7,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 
-N_TEST = 10
+N_TEST = 100000
 np.set_printoptions(precision=3)
 np.set_printoptions(suppress=True)
 plt.style.use('seaborn-deep')
@@ -15,7 +15,14 @@ plt.style.use('seaborn-deep')
 
 def main():
     check_cuda_device()
-    _, _, w_ds = get_datasets()
+    pos_bs = np.load(FILENAMES["pos_bs"])
+    pos_user = np.load(FILENAMES["pos_user"])
+    if os.path.exists("w_unnorm.npy"):
+        w_ds = np.load("w_unnorm.npy")
+    else:
+        w_ds = get_w_unnormalized(pos_bs, pos_user)
+        np.save("w_unnorm.npy", w_ds)
+
     D_mp = np.load(FILENAMES["D_mp"])
     alpha_mp = np.load(FILENAMES["alpha_mp"])
     rho_mp = np.load(FILENAMES["rho_mp"])
@@ -45,7 +52,7 @@ def main():
                 "hungarian": np.zeros(N_TEST)}
     rl_times = np.zeros(N_TEST)
     for i in range(N_TEST):
-        # if i != 1237:
+        # if i != 0:
         #     continue
         data_no = i + N_TRAIN
         w = reshape_to_square(w_ds[data_no], N_NODE)
@@ -57,10 +64,8 @@ def main():
             # D_mp[data_no] = exclude_collision(D_mp[data_no])
         sumrates["mp"][i] = np.sum(D_mp[data_no]*w)
 
-        tic_rl = time.time()
-        alpha_rl, rho_rl = test_pi(pi_alpha, pi_rho, w_ds[data_no])
+        alpha_rl, rho_rl, rl_times[i] = test_pi(pi_alpha, pi_rho, w_ds[data_no], D_mp[data_no])
         D_rl = get_pairing_matrix_argmax(alpha_rl, rho_rl, N_NODE)
-        rl_times[i] = time.time() - tic_rl
         if not check_pairing_validity(D_rl):
             D_rl = greedy_CA(alpha_rl+rho_rl, D_rl)
             # D_rl = exclude_collision(D_rl)
@@ -75,18 +80,32 @@ def main():
     print(f"Avg sum rate (RL): {np.mean(sumrates['rl'])}")
     print(f"Avg time (RL): {np.mean(rl_times)}")
 
-    # bins = np.linspace(0, 5, 26)
-    # plt.hist([sumrates["hungarian"], sumrates["mp"], sumrates["rl"]],
-    #          bins, label=["Hungarian", "Ising", "RL"])
-    # plt.legend()
-    # plt.xlim(0, 5)
-    # plt.title("Test set evaluations")
-    # plt.xlabel("sum-rate [bps]")
-    # plt.ylabel("number of samples")
-    # plt.savefig("tmp.png")
+    bins = np.linspace(0, 35, 36)
+    plt.hist([sumrates["hungarian"], sumrates["mp"], sumrates["rl"]],
+             bins, label=["Hungarian", "Ising", "RL"])
+    plt.legend()
+    plt.xlim(0, 35)
+    plt.title("Test set evaluations")
+    plt.xlabel("sum-rate [bps]")
+    plt.ylabel("number of samples")
+    plt.savefig("hist.png")
+    np.save("sumrates_hungarian.npy", sumrates["hungarian"])
+    np.save("sumrates_mp.npy", sumrates["mp"])
+    np.save("sumrates_rl.npy", sumrates["rl"])
+    plt.close("all")
+
+def get_w_unnormalized(pos_bs, pos_user):
+    datarate = np.zeros((N_DATASET, N_NODE**2))
+    for n in range(N_DATASET):
+        for i in range(N_NODE):
+            for j in range(N_NODE):
+                dist = np.linalg.norm(
+                    pos_bs[n, i] - pos_user[n, j], 2)
+                datarate[n, N_NODE*i+j] = np.log2(1+1/(4*np.pi*dist**3))
+    return datarate
 
 
-def test_pi(pi_alpha, pi_rho, w):
+def test_pi(pi_alpha, pi_rho, w, D_ans):
     alpha = torch.zeros((N_NODE**2))
     rho = torch.zeros((N_NODE**2))
     w_tensor = torch.from_numpy(w.astype(np.float32))
@@ -97,9 +116,12 @@ def test_pi(pi_alpha, pi_rho, w):
         alpha, rho = alpha + alpha_act, rho + rho_act
         alpha = torch.clamp(alpha, -1, 1)
         rho = torch.clamp(rho, -1, 1)
-    alpha_rl = reshape_to_square(alpha.detach().numpy(), N_NODE)
-    rho_rl = reshape_to_square(rho.detach().numpy(), N_NODE)
-    return alpha_rl, rho_rl
+
+        alpha_rl = reshape_to_square(alpha.detach().numpy(), N_NODE)
+        rho_rl = reshape_to_square(rho.detach().numpy(), N_NODE)
+        if (D_ans == get_pairing_matrix_argmax(alpha_rl, rho_rl, N_NODE)).all():
+            return alpha_rl, rho_rl, t
+    return alpha_rl, rho_rl, t
 
 
 def greedy_CA(D_float, D):
@@ -141,3 +163,5 @@ def exclude_collision(D):
 
 if __name__=="__main__":
     main()
+
+# %%

@@ -15,8 +15,8 @@ matplotlib.use('Agg')
 
 def main():
     idx = np.linspace(0, 10, 11, dtype=int)
-    n_node = 10
-    n_iter = 15
+    n_node = 5
+    n_iter = 50
     w_ds = np.load(f"{n_node}x{n_node}_w.npy")
     pos_bs = np.load(f"{n_node}x{n_node}_bs_pos.npy")
     pos_user = np.load(f"{n_node}x{n_node}_user_pos.npy")
